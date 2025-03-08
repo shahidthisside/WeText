@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Wastext.com - Find Your Kind of Weird</title>
+  <link rel="stylesheet" href="styles.css">
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/@emoji-mart/data@1.1.1/emoji-mart.data.min.js" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/@emoji-mart/react@1.1.1/dist/index.min.js" defer></script>
+  <script type="module">
+    // Custom element registration for emoji-picker
+    import { EmojiMartData } from 'https://cdn.jsdelivr.net/npm/@emoji-mart/data@1.1.1/emoji-mart.data.min.js';
+    import { EmojiPicker } from 'https://cdn.jsdelivr.net/npm/@emoji-mart/react@1.1.1/dist/index.min.js';
+
+    customElements.define('emoji-picker', EmojiPicker, { extends: 'div' });
+  </script>
+</head>
+<body class="dark-mode">
+  <header>
+    <h1>Wastext.com</h1>
+    <nav>
+      <button id="theme-toggle" title="Toggle Theme">
+        <i class="fas fa-moon"></i> <!-- Moon icon for dark mode -->
+      </button>
+    </nav>
+  </header>
+  <div class="main-container">
+    <aside class="sidebar">
+      <div class="nav-item" data-section="match-feed"><i class="fas fa-search"></i> Find Weird</div>
+      <div class="nav-item" data-section="common-feed"><i class="fas fa-rss"></i> Common Feed</div>
+      <div class="nav-item" data-section="weird-feed"><i class="fas fa-bullhorn"></i> Weird Feed</div>
+      <div class="nav-item" data-section="chat-section"><i class="fas fa-comment"></i> Chat</div>
+      <div class="nav-item" data-section="matches"><i class="fas fa-users"></i> Matches</div>
+      <div class="nav-item" data-section="friends"><i class="fas fa-user-friends"></i> Friends</div>
+    </aside>
+    <main>
+      <section id="match-feed" class="match-feed active">
+        <h2>Find Your Weird</h2>
+        <div class="search-bar">
+          <input type="text" id="username-search" placeholder="Search by username..." />
+          <button id="search-btn"><i class="fas fa-search"></i></button>
+        </div>
+        <div class="filters">
+          <select id="match-filter">
+            <option value="all">All</option>
+            <option value="tags">By Tags</option>
+            <option value="likes">By Likes</option>
+            <option value="match">By Match %</option>
+          </select>
+          <select id="match-sort">
+            <option value="none">Sort By</option>
+            <option value="match-desc">Match % (High to Low)</option>
+            <option value="match-asc">Match % (Low to High)</option>
+            <option value="username">Username (A-Z)</option>
+          </select>
+        </div>
+      </section>
+      <section id="common-feed" class="common-feed">
+        <h2>Common Feed</h2>
+        <div class="feed-toggle">
+          <button class="toggle-btn active" data-type="posts">Posts</button>
+          <button class="toggle-btn" data-type="thoughts">Weird Thoughts</button>
+        </div>
+        <div id="common-feed-content"></div>
+      </section>
+      <section id="weird-feed" class="weird-feed">
+        <h2>Weird Feed</h2>
+        <form id="post-form">
+          <textarea id="post-input" placeholder="What’s on your weird mind? (280 chars max)" maxlength="280"></textarea>
+          <label><input type="checkbox" id="anon-check" checked> Anonymous</label>
+          <div class="post-type-buttons">
+            <button type="button" id="post-btn">Post</button>
+            <button type="button" id="thought-btn">Thought</button>
+          </div>
+        </form>
+        <div id="feed"></div>
+      </section>
+      <section id="chat-section" class="chat-section">
+        <div class="chat-header">
+          <button class="back-btn"><i class="fas fa-arrow-left"></i></button>
+          <h2>Chat with [Contact]</h2>
+        </div>
+        <div id="chat-list">
+          <p>Select a match or friend to chat!</p>
+        </div>
+        <div id="typing-indicator" style="display: none;">Typing...</div>
+        <form id="chat-form" style="display: none;">
+          <div class="emoji-picker-container" style="display: none;">
+            <emoji-picker></emoji-picker>
+          </div>
+          <div class="chat-input-container">
+            <textarea id="chat-input" placeholder="Type a message... (Use :emoji: or click 😊)" rows="1"></textarea>
+            <button type="button" id="emoji-btn"><i class="fas fa-smile"></i></button>
+            <label for="file-input" class="file-btn"><i class="fas fa-paperclip"></i></label>
+            <input type="file" id="file-input" accept="image/*" style="display: none;" />
+          </div>
+          <div class="chat-actions">
+            <button type="submit">Send</button>
+            <button type="button" id="clear-chat">Clear Chat</button>
+          </div>
+        </form>
+      </section>
+      <section id="matches" class="matches">
+        <h2>Your Matches</h2>
+      </section>
+      <section id="friends" class="friends">
+        <h2>Your Friends</h2>
+      </section>
+    </main>
+  </div>
+  <div class="profile-popup" style="display: none;">
+    <div class="popup-content">
+      <div class="profile-header">
+        <img id="profile-avatar" src="https://via.placeholder.com/80" alt="Avatar" class="avatar">
+        <h3 id="profile-username">User Profile</h3>
+      </div>
+      <p><strong>Thought:</strong> <span id="profile-thought"></span></p>
+      <p><strong>Tags:</strong> <span id="profile-tags"></span></p>
+      <p><strong>Match:</strong> <span id="profile-match"></span>%</p>
+      <p><strong>Likes:</strong> <span id="profile-likes"></span> | <strong>Comments:</strong> <span id="profile-comments"></span></p>
+      <p><strong>Bio:</strong> <span id="profile-bio"></span></p>
+      <button id="edit-profile">Edit Profile</button>
+      <button onclick="document.querySelector('.profile-popup').style.display = 'none'">Close</button>
+    </div>
+  </div>
+  <script src="script.js"></script>
+</body>
+</html>

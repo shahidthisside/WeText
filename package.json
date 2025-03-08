@@ -16,5 +16,9 @@
     "url": "https://github.com/shahidthisside/wastext/issues"
   },
   "homepage": "https://github.com/shahidthisside/wastext#readme",
-  "description": ""
+  "description": "",
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.21.2"
+  }
 }

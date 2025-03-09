@@ -4,12 +4,15 @@
   "description": "Wastext.com - Find Your Kind of Weird",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js",
-    "dev": "nodemon server.js"
+    "start": "node server/server.js",
+    "dev": "nodemon server/server.js"
   },
   "dependencies": {
+    "bcrypt": "^5.1.1",
     "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
     "express": "^4.17.1",
+    "jsonwebtoken": "^9.0.2",
     "semver": "^7.7.1"
   },
   "devDependencies": {

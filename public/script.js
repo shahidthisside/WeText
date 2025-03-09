@@ -1,48 +1,59 @@
-// Fake user data (for now, we'll simulate usernames in profiles for Wastext.com)
-const profiles = [
-  { username: "QuirkLord42", thought: "What if cats are alien spies?", tags: "#weirdpets #conspiracy", match: 89, likes: 5, comments: 2, bio: "Oddball pondering the universe.", avatar: "https://via.placeholder.com/80/8a4af3/ffffff?text=QL" },
-  { username: "CloudLover", thought: "Clouds are just sky hugs.", tags: "#weirdweather #deepthoughts", match: 92, likes: 10, comments: 4, bio: "Sky enthusiast with quirky ideas.", avatar: "https://via.placeholder.com/80/4af38a/ffffff?text=CL" },
-  { username: "ToastFan", thought: "Toast is bread flexing.", tags: "#foodthoughts #oddideas", match: 85, likes: 3, comments: 1, bio: "Bread lover with a twist.", avatar: "https://via.placeholder.com/80/f38a4a/ffffff?text=TF" }
-];
-
+// Global state
+let currentUser = null;
+let token = localStorage.getItem('token') || null;
+let profiles = [];
 let matches = [];
 let friends = [];
-let posts = [
-  { 
-    user: "QuirkLord42", 
-    content: "Just saw a cloud shaped like a middle finger.", 
-    timestamp: "2m ago", 
-    type: "post", 
-    likes: 0, 
-    comments: [
-      { user: "WeirdFan", content: "That’s epic!", timestamp: "1m ago", replies: [
-        { user: "CloudLover", content: "Totally!", timestamp: "30s ago", replies: [
-          { user: "QuirkLord42", content: "youuuu", timestamp: "12:58:38 AM", replies: [
-            { user: "QuirkLord42", content: "boyyy", timestamp: "12:59:42 AM", replies: [
-              { user: "QuirkLord42", content: "yes", timestamp: "12:59:30 AM", replies: [] }
-            ]}
-          ]}
-        ]}
-      ] }
-    ], 
-    tags: "#weirdweather #funny"
-  }
-];
-let thoughts = [
-  { 
-    user: "Anonymous", 
-    content: "What if cats are alien spies?", 
-    timestamp: "recent", 
-    type: "thought", 
-    likes: 5, 
-    comments: [],
-    tags: "#weirdpets #conspiracy"
-  }
-];
+let posts = [];
+let thoughts = [];
 let chatHistories = {};
 let isTyping = false;
 let replyingToMessage = null;
 
+// Check if user is already logged in
+if (token) {
+  try {
+    fetch('http://localhost:5001/api/users', {
+      headers: { 'Authorization': `Bearer ${token}` }
+    })
+      .then(res => res.json())
+      .then(data => {
+        currentUser = data.find(u => u.id === JSON.parse(atob(token.split('.')[1])).id);
+        if (currentUser) {
+          document.getElementById('auth-text').textContent = 'Logout';
+        } else {
+          localStorage.removeItem('token');
+          token = null;
+        }
+      });
+  } catch (error) {
+    console.error('Error verifying token:', error);
+    localStorage.removeItem('token');
+    token = null;
+  }
+}
+
+// Fetch initial data from backend
+async function fetchInitialData() {
+  try {
+    const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
+    const [usersRes, postsRes] = await Promise.all([
+      fetch('http://localhost:5001/api/users', { headers }),
+      fetch('http://localhost:5001/api/posts', { headers })
+    ]);
+    profiles = await usersRes.json();
+    posts = await postsRes.json();
+    thoughts = posts.filter(p => p.type === 'thought');
+    renderCards();
+    renderMatches();
+    renderFriends();
+    renderFeeds();
+  } catch (error) {
+    console.error('Error fetching initial data:', error);
+  }
+}
+
+// Render functions
 function renderCards(searchQuery = '', filter = 'all', sort = 'none') {
   const matchFeed = document.querySelector('.match-feed');
   matchFeed.innerHTML = `
@@ -72,7 +83,6 @@ function renderCards(searchQuery = '', filter = 'all', sort = 'none') {
     filteredProfiles = filteredProfiles.filter(profile => profile.username.toLowerCase().includes(searchQuery.toLowerCase()));
   }
 
-  // Apply filtering
   if (filter === 'tags') {
     filteredProfiles = filteredProfiles.filter(profile => profile.tags);
   } else if (filter === 'likes') {
@@ -81,7 +91,6 @@ function renderCards(searchQuery = '', filter = 'all', sort = 'none') {
     filteredProfiles = filteredProfiles.filter(profile => profile.match >= 80);
   }
 
-  // Apply sorting
   if (sort === 'match-desc') {
     filteredProfiles.sort((a, b) => b.match - a.match);
   } else if (sort === 'match-asc') {
@@ -90,7 +99,6 @@ function renderCards(searchQuery = '', filter = 'all', sort = 'none') {
     filteredProfiles.sort((a, b) => a.username.localeCompare(b.username));
   }
 
-  // Show "No results" message if no matches
   if (filteredProfiles.length === 0) {
     matchFeed.innerHTML += '<p>No results found.</p>';
     return;
@@ -117,15 +125,27 @@ function renderCards(searchQuery = '', filter = 'all', sort = 'none') {
   });
 
   document.querySelectorAll('.yes-btn').forEach(btn => {
-    btn.addEventListener('click', function() {
+    btn.addEventListener('click', async function() {
+      if (!currentUser) {
+        alert('Please log in to add matches!');
+        return;
+      }
       const card = this.closest('.card');
       const index = card.getAttribute('data-index');
-      matches.push(filteredProfiles[index]);
-      card.style.opacity = '0';
-      setTimeout(() => card.remove(), 300);
-      alert('Match! Added to your matches.');
-      renderMatches();
-      renderFeeds();
+      const match = filteredProfiles[index];
+      const response = await fetch('http://localhost:5001/api/matches', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ userId: currentUser.id, matchId: match.id })
+      });
+      if (response.ok) {
+        matches.push(match);
+        card.style.opacity = '0';
+        setTimeout(() => card.remove(), 300);
+        alert('Match! Added to your matches.');
+        renderMatches();
+        renderFeeds();
+      }
     });
   });
   document.querySelectorAll('.no-btn').forEach(btn => {
@@ -137,11 +157,20 @@ function renderCards(searchQuery = '', filter = 'all', sort = 'none') {
     });
   });
   document.querySelectorAll('.like-btn').forEach(btn => {
-    btn.addEventListener('click', function() {
+    btn.addEventListener('click', async function() {
+      if (!currentUser) {
+        alert('Please log in to like profiles!');
+        return;
+      }
       const card = this.closest('.card');
       const index = card.getAttribute('data-index');
       filteredProfiles[index].likes++;
       card.querySelector('.like-count').textContent = filteredProfiles[index].likes;
+      await fetch(`http://localhost:5001/api/users/${filteredProfiles[index].id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ likes: filteredProfiles[index].likes })
+      });
       renderFeeds();
     });
   });
@@ -153,7 +182,6 @@ function renderCards(searchQuery = '', filter = 'all', sort = 'none') {
     });
   });
 
-  // Reattach filter and sort event listeners
   document.getElementById('match-filter').value = filter;
   document.getElementById('match-sort').value = sort;
   document.getElementById('match-filter').addEventListener('change', (e) => {
@@ -163,7 +191,6 @@ function renderCards(searchQuery = '', filter = 'all', sort = 'none') {
     renderCards(searchQuery, document.getElementById('match-filter').value, e.target.value);
   });
 
-  // Reattach search event listeners
   document.getElementById('search-btn').addEventListener('click', () => {
     const searchQuery = document.getElementById('username-search').value;
     renderCards(searchQuery, filter, sort);
@@ -204,10 +231,18 @@ function renderMatches() {
     });
 
     document.querySelectorAll('.remove-btn').forEach(btn => {
-      btn.addEventListener('click', function(e) {
+      btn.addEventListener('click', async function(e) {
         e.stopPropagation();
+        if (!currentUser) {
+          alert('Please log in to remove matches!');
+          return;
+        }
         const matchDiv = this.closest('.match');
         const index = matchDiv.getAttribute('data-index');
+        await fetch(`http://localhost:5001/api/matches/${matches[index].id}`, {
+          method: 'DELETE',
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
         matches.splice(index, 1);
         renderMatches();
         renderFeeds();
@@ -222,21 +257,40 @@ function renderMatches() {
       });
     });
     document.querySelectorAll('.like-btn').forEach(btn => {
-      btn.addEventListener('click', function(e) {
+      btn.addEventListener('click', async function(e) {
         e.stopPropagation();
+        if (!currentUser) {
+          alert('Please log in to like matches!');
+          return;
+        }
         const matchDiv = this.closest('.match');
         const index = matchDiv.getAttribute('data-index');
         matches[index].likes++;
         matchDiv.querySelector('.like-count').textContent = matches[index].likes;
+        await fetch(`http://localhost:5001/api/users/${matches[index].id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+          body: JSON.stringify({ likes: matches[index].likes })
+        });
         renderFeeds();
       });
     });
     document.querySelectorAll('.friend-btn').forEach(btn => {
-      btn.addEventListener('click', function(e) {
+      btn.addEventListener('click', async function(e) {
         e.stopPropagation();
+        if (!currentUser) {
+          alert('Please log in to add friends!');
+          return;
+        }
         const matchDiv = this.closest('.match');
         const index = matchDiv.getAttribute('data-index');
-        friends.push(matches[index]);
+        const friend = matches[index];
+        await fetch('http://localhost:5001/api/friends', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+          body: JSON.stringify({ userId: currentUser.id, friendId: friend.id })
+        });
+        friends.push(friend);
         matches.splice(index, 1);
         renderMatches();
         renderFriends();
@@ -301,7 +355,7 @@ function renderCommonFeed() {
   commonFeed.innerHTML = '';
 
   let feedItems = toggleType === 'posts' ? [...posts] : [...thoughts];
-  
+
   feedItems.forEach((item, index) => {
     renderPost(item, index, commonFeed);
   });
@@ -312,7 +366,7 @@ function renderWeirdFeed() {
   weirdFeed.innerHTML = '';
 
   let feedItems = [...posts, ...thoughts];
-  
+
   feedItems.forEach((item, index) => {
     renderPost(item, index, weirdFeed);
   });
@@ -323,7 +377,7 @@ function renderPost(post, index, container) {
   postDiv.className = 'post';
   postDiv.setAttribute('data-index', index);
   postDiv.innerHTML = `
-    <p><strong>${post.user} - ${post.timestamp}</strong></p>
+    <p><strong>${post.userId ? profiles.find(p => p.id === post.userId)?.username || 'Anonymous' : 'Anonymous'} - ${post.timestamp}</strong></p>
     <p>${post.content}</p>
     <p><strong>Tags:</strong> ${post.tags || 'None'}</p>
     <p>Likes: <span class="like-count">${post.likes}</span> | Comments: <span class="comment-count">${post.comments.length}</span></p>
@@ -343,37 +397,65 @@ function renderPost(post, index, container) {
     renderComment(comment, index, [commentIndex], commentSection);
   });
 
-  postDiv.querySelector('.like-btn').addEventListener('click', () => {
+  postDiv.querySelector('.like-btn').addEventListener('click', async () => {
+    if (!currentUser) {
+      alert('Please log in to like posts!');
+      return;
+    }
     post.likes++;
     postDiv.querySelector('.like-count').textContent = post.likes;
+    await fetch(`http://localhost:5001/api/posts/${post.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({ likes: post.likes })
+    });
   });
 
   postDiv.querySelector('.view-profile-btn').addEventListener('click', () => {
-    const profile = profiles.find(p => p.username === post.user) || { username: post.user, thought: '', tags: '', match: 0, likes: 0, comments: 0, bio: 'No bio available.', avatar: "https://via.placeholder.com/80/cccccc/ffffff?text=Anon" };
+    const profile = profiles.find(p => p.id === post.userId) || { username: 'Anonymous', thought: '', tags: '', match: 0, likes: 0, comments: 0, bio: 'No bio available.', avatar: 'https://via.placeholder.com/80/cccccc/ffffff?text=Anon' };
     showProfile(profile);
   });
 
-  postDiv.querySelector('.friend-btn').addEventListener('click', () => {
-    if (post.user === 'Anonymous' || post.user === 'QuirkLord42') {
-      alert(`Cannot add yourself or anonymous users as friends!`);
+  postDiv.querySelector('.friend-btn').addEventListener('click', async () => {
+    if (!currentUser) {
+      alert('Please log in to add friends!');
       return;
     }
-    const profile = profiles.find(p => p.username === post.user) || { username: post.user, thought: post.content, tags: post.tags, match: 0, likes: post.likes, comments: post.comments.length, bio: 'No bio available.', avatar: "https://via.placeholder.com/80/cccccc/ffffff?text=Anon" };
-    if (!friends.some(f => f.username === profile.username)) {
+    if (post.userId === currentUser.id) {
+      alert(`Cannot add yourself as a friend!`);
+      return;
+    }
+    const profile = profiles.find(p => p.id === post.userId);
+    if (profile && !friends.some(f => f.id === profile.id)) {
+      await fetch('http://localhost:5001/api/friends', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ userId: currentUser.id, friendId: profile.id })
+      });
       friends.push(profile);
       renderFriends();
       alert(`${profile.username} added as a friend!`);
     } else {
-      alert(`${profile.username} is already your friend!`);
+      alert(`${profile?.username || 'Anonymous'} is already your friend or anonymous!`);
     }
   });
 
-  postDiv.querySelector('.comment-form').addEventListener('submit', function(e) {
+  postDiv.querySelector('.comment-form').addEventListener('submit', async function(e) {
     e.preventDefault();
+    if (!currentUser) {
+      alert('Please log in to comment!');
+      return;
+    }
     const input = postDiv.querySelector('.comment-form input');
     if (input.value.trim()) {
       const timestamp = new Date().toLocaleTimeString();
-      post.comments.push({ user: 'QuirkLord42', content: input.value, timestamp, replies: [] });
+      const newComment = { id: post.comments.length + 1, userId: currentUser.id, content: input.value, timestamp, replies: [] };
+      post.comments.push(newComment);
+      await fetch(`http://localhost:5001/api/posts/${post.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ comments: post.comments })
+      });
       renderFeeds();
       input.value = '';
     }
@@ -383,9 +465,10 @@ function renderPost(post, index, container) {
 function renderComment(comment, postIndex, commentPath, container) {
   const commentDiv = document.createElement('div');
   commentDiv.className = 'comment';
-  commentDiv.style.marginLeft = '0'; // Explicitly set margin-left to 0 for all levels
+  commentDiv.style.marginLeft = '0';
+  const username = profiles.find(p => p.id === comment.userId)?.username || 'Anonymous';
   commentDiv.innerHTML = `
-    <p><strong>${comment.user}</strong> ${comment.content} <span>${comment.timestamp}</span></p>
+    <p><strong>${username}</strong> ${comment.content} <span>${comment.timestamp}</span></p>
     <button class="reply-btn">Reply</button>
   `;
   container.appendChild(commentDiv);
@@ -410,17 +493,26 @@ function renderComment(comment, postIndex, commentPath, container) {
     replyForm.style.display = replyForm.style.display === 'none' ? 'flex' : 'none';
   });
 
-  replyForm.addEventListener('submit', function(e) {
+  replyForm.addEventListener('submit', async function(e) {
     e.preventDefault();
+    if (!currentUser) {
+      alert('Please log in to reply!');
+      return;
+    }
     const input = replyForm.querySelector('input');
     if (input.value.trim()) {
       const timestamp = new Date().toLocaleTimeString();
-      const newReply = { user: 'QuirkLord42', content: input.value, timestamp, replies: [] };
+      const newReply = { id: comment.replies.length + 1, userId: currentUser.id, content: input.value, timestamp, replies: [] };
       let currentLevel = posts[postIndex].comments;
       commentPath.forEach(idx => {
         currentLevel = currentLevel[idx].replies;
       });
       currentLevel.push(newReply);
+      await fetch(`http://localhost:5001/api/posts/${posts[postIndex].id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ comments: posts[postIndex].comments })
+      });
       renderFeeds();
       input.value = '';
       replyForm.style.display = 'none';
@@ -434,14 +526,19 @@ function renderFeeds() {
 }
 
 function showProfile(profile) {
-  document.getElementById('profile-username').textContent = profile.username;
-  document.getElementById('profile-thought').textContent = profile.thought;
+  console.log('showProfile called with profile:', profile); // Debug log to trace calls
+  if (!profile) {
+    console.error('No profile provided to showProfile');
+    return;
+  }
+  document.getElementById('profile-username').textContent = profile.username || 'Unknown';
+  document.getElementById('profile-thought').textContent = profile.thought || '';
   document.getElementById('profile-tags').textContent = profile.tags || 'None';
-  document.getElementById('profile-match').textContent = profile.match;
-  document.getElementById('profile-likes').textContent = profile.likes;
-  document.getElementById('profile-comments').textContent = profile.comments;
-  document.getElementById('profile-bio').textContent = profile.bio;
-  document.getElementById('profile-avatar').src = profile.avatar;
+  document.getElementById('profile-match').textContent = profile.match || 0;
+  document.getElementById('profile-likes').textContent = profile.likes || 0;
+  document.getElementById('profile-comments').textContent = profile.comments || 0;
+  document.getElementById('profile-bio').textContent = profile.bio || 'No bio available.';
+  document.getElementById('profile-avatar').src = profile.avatar || 'https://via.placeholder.com/80/cccccc/ffffff?text=User';
   document.querySelector('.profile-popup').style.display = 'flex';
 
   document.getElementById('edit-profile').addEventListener('click', () => {
@@ -449,7 +546,11 @@ function showProfile(profile) {
   });
 }
 
-function showChat(contact) {
+async function showChat(contact) {
+  if (!currentUser) {
+    alert('Please log in to chat!');
+    return;
+  }
   switchSection('chat-section');
   const chatList = document.getElementById('chat-list');
   const chatForm = document.getElementById('chat-form');
@@ -461,44 +562,38 @@ function showChat(contact) {
   const chatInput = document.getElementById('chat-input');
   const fileInput = document.getElementById('file-input');
   const backBtn = document.querySelector('.back-btn');
-  const contactKey = contact.thought;
+  const contactKey = `${currentUser.id}-${contact.id}`;
 
-  if (!chatHistories[contactKey]) {
-    chatHistories[contactKey] = [{ sender: 'Them', message: `${contact.thought} (their last thought)`, timestamp: new Date().toLocaleTimeString(), status: 'read', readAt: null }];
-  }
+  const response = await fetch(`http://localhost:5001/api/messages/${currentUser.id}/${contact.id}`, {
+    headers: { 'Authorization': `Bearer ${token}` }
+  });
+  chatHistories[contactKey] = await response.json() || [];
 
-  // Update chat header with contact username
   document.querySelector('.chat-header h2').textContent = `Chat with ${contact.username}`;
-  
+
   chatForm.style.display = 'block';
-  replyingToMessage = null; // Reset replying state
+  replyingToMessage = null;
 
   function renderChatMessages() {
-    // Only append new messages instead of re-rendering the entire list
     const newMessages = chatHistories[contactKey].slice(chatList.children.length - 1);
     newMessages.forEach((msg, index) => {
       if (index === 0 && chatList.children.length === 1 && chatList.children[0].tagName === 'P') {
-        chatList.innerHTML = ''; // Clear initial placeholder only if no messages yet
+        chatList.innerHTML = '';
       }
       const msgDiv = document.createElement('div');
-      msgDiv.className = `message ${msg.sender === 'You' ? 'sent' : 'received'} ${msg.replyTo ? 'reply' : ''}`;
+      msgDiv.className = `message ${msg.userId === currentUser.id ? 'sent' : 'received'} ${msg.replyTo ? 'reply' : ''}`;
       msgDiv.setAttribute('data-index', chatList.children.length);
-      let statusIndicator = '';
-      if (msg.sender === 'You') {
-        if (msg.status === 'sent') statusIndicator = '<span class="status-indicator">Sent</span>';
-        else if (msg.status === 'delivered') statusIndicator = '<span class="status-indicator">Delivered</span>';
-        else if (msg.status === 'read' && msg.readAt) statusIndicator = `<span class="status-indicator">Read</span><span class="read-receipt"> Seen at ${new Date(msg.readAt).toLocaleTimeString()}</span>`;
-      }
+      let statusIndicator = msg.userId === currentUser.id ? '<span class="status-indicator">Sent</span>' : '';
       let replyContent = '';
-      if (msg.replyTo !== undefined && msg.replyTo !== null) {
-        const repliedMsg = chatHistories[contactKey][msg.replyTo];
-        replyContent = `<div class="reply-to">${repliedMsg.sender}: ${repliedMsg.message || '[File]'}</div>`;
+      if (msg.replyTo) {
+        const repliedMsg = chatHistories[contactKey][msg.replyTo - 1];
+        replyContent = `<div class="reply-to">${repliedMsg.userId === currentUser.id ? 'You' : contact.username}: ${repliedMsg.message || '[File]'}</div>`;
       }
       let filePreview = '';
       if (msg.file) {
         filePreview = `<div class="file-preview"><img src="${msg.file}" alt="Attachment" /><a href="${msg.file}" download>Download</a></div>`;
       }
-      const avatarSrc = msg.sender === 'You' ? profiles.find(p => p.username === 'QuirkLord42').avatar : contact.avatar;
+      const avatarSrc = msg.userId === currentUser.id ? currentUser.avatar : contact.avatar;
       msgDiv.innerHTML = `
         <img src="${avatarSrc}" alt="Avatar" class="message-avatar">
         <div class="message-body">
@@ -515,17 +610,13 @@ function showChat(contact) {
 
   renderChatMessages();
 
-  // Typing indicator logic for the user
   chatInput.addEventListener('input', () => {
     if (!isTyping) {
       isTyping = true;
-      setTimeout(() => {
-        isTyping = false;
-      }, 2000);
+      setTimeout(() => { isTyping = false; }, 2000);
     }
   });
 
-  // Typing indicator for the recipient (simulated)
   let typingTimeout;
   function simulateRecipientTyping() {
     typingIndicator.classList.add('active');
@@ -536,88 +627,59 @@ function showChat(contact) {
     }, 1500);
   }
 
-  chatForm.onsubmit = function(e) {
+  chatForm.onsubmit = async function(e) {
     e.preventDefault();
     let messageSent = false;
     const timestamp = new Date().toLocaleTimeString();
 
-    // Handle text message
     if (chatInput.value.trim()) {
-      const msg = {
-        sender: 'You',
-        message: chatInput.value,
-        timestamp,
-        status: 'sent',
-        readAt: null,
-        replyTo: replyingToMessage
-      };
-      chatHistories[contactKey].push(msg);
+      const response = await fetch('http://localhost:5001/api/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ userId: currentUser.id, contactId: contact.id, message: chatInput.value })
+      });
+      const newMessage = await response.json();
+      chatHistories[contactKey].push(newMessage);
       messageSent = true;
       chatInput.value = '';
     }
 
-    // Handle file attachment
     if (fileInput.files.length > 0) {
       const file = fileInput.files[0];
       const reader = new FileReader();
-      reader.onload = function(e) {
-        const msg = {
-          sender: 'You',
-          file: e.target.result,
-          timestamp,
-          status: 'sent',
-          readAt: null,
-          replyTo: replyingToMessage
-        };
-        chatHistories[contactKey].push(msg);
+      reader.onload = async function(e) {
+        const response = await fetch('http://localhost:5001/api/messages', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+          body: JSON.stringify({ userId: currentUser.id, contactId: contact.id, file: e.target.result })
+        });
+        const newMessage = await response.json();
+        chatHistories[contactKey].push(newMessage);
         renderChatMessages();
-        fileInput.value = ''; // Clear file input
-        handleMessageStatus(msg);
+        fileInput.value = '';
       };
       reader.readAsDataURL(file);
       messageSent = true;
     }
 
     if (messageSent) {
-      replyingToMessage = null; // Reset replying state
+      replyingToMessage = null;
       chatInput.placeholder = 'Type a message... (Use :emoji: or click 😊)';
       renderChatMessages();
 
-      // Simulate message status updates
-      const lastMsgIndex = chatHistories[contactKey].length - 1;
-      const lastMsg = chatHistories[contactKey][lastMsgIndex];
-      handleMessageStatus(lastMsg);
-
-      // Simulate recipient typing and replying
       simulateRecipientTyping();
-      setTimeout(() => {
-        const replyTimestamp = new Date().toLocaleTimeString();
-        const replyMsg = {
-          sender: 'Them',
-          message: '😊 That’s weirdly cool!',
-          timestamp: replyTimestamp,
-          status: 'read',
-          readAt: new Date(),
-          replyTo: lastMsgIndex
-        };
-        chatHistories[contactKey].push(replyMsg);
+      setTimeout(async () => {
+        const replyResponse = await fetch('http://localhost:5001/api/messages', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+          body: JSON.stringify({ userId: contact.id, contactId: currentUser.id, message: '😊 That’s weirdly cool!', replyTo: chatHistories[contactKey].length })
+        });
+        const replyMessage = await replyResponse.json();
+        chatHistories[contactKey].push(replyMessage);
         renderChatMessages();
       }, 2000);
     }
   };
-
-  function handleMessageStatus(msg) {
-    setTimeout(() => {
-      msg.status = 'delivered';
-      renderChatMessages();
-    }, 1000);
-
-    setTimeout(() => {
-      msg.status = 'read';
-      msg.readAt = new Date();
-      renderChatMessages();
-    }, 3000);
-  }
 
   clearChatBtn.onclick = function() {
     chatHistories[contactKey] = [];
@@ -627,19 +689,16 @@ function showChat(contact) {
     chatInput.placeholder = 'Type a message... (Use :emoji: or click 😊)';
   };
 
-  // Back button to return to sidebar
   backBtn.addEventListener('click', () => {
-    switchSection('matches'); // Return to Matches section or sidebar default
+    switchSection('matches');
     replyingToMessage = null;
     chatInput.placeholder = 'Type a message... (Use :emoji: or click 😊)';
   });
 
-  // Emoji support
   emojiBtn.addEventListener('click', () => {
     emojiPickerContainer.style.display = emojiPickerContainer.style.display === 'none' ? 'block' : 'none';
   });
 
-  // Ensure emoji picker is initialized and handle selection
   if (!emojiPicker) {
     console.error('Emoji picker not found in DOM');
     return;
@@ -647,53 +706,55 @@ function showChat(contact) {
 
   emojiPicker.addEventListener('emoji-select', (event) => {
     const emoji = event.detail.emoji;
-    chatInput.value += emoji.native || `:${emoji.id}:`; // Add native emoji or shortcode
+    chatInput.value += emoji.native || `:${emoji.id}:`;
     emojiPickerContainer.style.display = 'none';
   });
 
-  // Add Enter key support for sending messages
   chatInput.addEventListener('keypress', (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) { // Send on Enter, allow Shift+Enter for newline
+    if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       chatForm.dispatchEvent(new Event('submit'));
     }
   });
 
-  // Auto-grow textarea on input
   chatInput.addEventListener('input', () => {
     chatInput.style.height = '20px';
     chatInput.style.height = `${chatInput.scrollHeight}px`;
     if (chatInput.scrollHeight > 100) chatInput.style.height = '100px';
   });
 
-  // Parse emoji shortcodes on render
   function parseEmojis(text) {
     const emojiRegex = /:([^:\s]+):/g;
     return text.replace(emojiRegex, (match, name) => {
       const emojiData = window.EmojiMartData.emojis[name]?.skins[0];
-      return emojiData?.native || match; // Use native emoji if available, otherwise keep shortcode
+      return emojiData?.native || match;
     });
   }
 
   chatList.scrollTop = chatList.scrollHeight;
 }
 
-document.getElementById('post-form').addEventListener('submit', function(e) {
+document.getElementById('post-form').addEventListener('submit', async function(e) {
   e.preventDefault();
+  if (!currentUser) {
+    alert('Please log in to post!');
+    return;
+  }
   const input = document.getElementById('post-input').value;
   const isAnon = document.getElementById('anon-check').checked;
-  const username = isAnon ? 'Anonymous' : 'QuirkLord42';
+  const userId = isAnon ? null : currentUser.id;
 
   if (input.trim()) {
     const timestamp = 'Just now';
     const type = document.getElementById('post-btn').classList.contains('active') ? 'post' : 'thought';
-    const newItem = { user: username, content: input, timestamp, type, likes: 0, comments: [], tags: `#weird${Math.random() > 0.5 ? 'pets' : 'weather'}` };
-
-    if (type === 'post') {
-      posts.unshift(newItem);
-    } else {
-      thoughts.unshift(newItem);
-    }
+    const response = await fetch('http://localhost:5001/api/posts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({ userId, content: input, timestamp, type, tags: `#weird${Math.random() > 0.5 ? 'pets' : 'weather'}` })
+    });
+    const newPost = await response.json();
+    if (type === 'post') posts.unshift(newPost);
+    else thoughts.unshift(newPost);
     document.getElementById('post-input').value = '';
     renderFeeds();
   }
@@ -709,10 +770,8 @@ document.getElementById('thought-btn').addEventListener('click', function() {
   document.getElementById('post-btn').classList.remove('active');
 });
 
-// Initial state: Post button active
 document.getElementById('post-btn').classList.add('active');
 
-// Search functionality
 document.getElementById('search-btn').addEventListener('click', () => {
   const searchQuery = document.getElementById('username-search').value;
   renderCards(searchQuery, 'all', 'none');
@@ -756,7 +815,6 @@ document.querySelectorAll('.toggle-btn').forEach(btn => {
   });
 });
 
-// Theme Toggle
 document.getElementById('theme-toggle').addEventListener('click', () => {
   document.body.classList.toggle('dark-mode');
   document.body.classList.toggle('light-mode');
@@ -767,8 +825,112 @@ document.getElementById('theme-toggle').addEventListener('click', () => {
   themeToggle.querySelector('i').className = isDark ? 'fas fa-moon' : 'fas fa-sun';
 });
 
-renderCards('', 'all', 'none');
-renderMatches();
-renderFriends();
-renderFeeds();
+document.querySelectorAll('.profile-popup .close-btn, .auth-popup .close-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelector('.profile-popup').style.display = 'none';
+    document.getElementById('login-popup').style.display = 'none';
+    document.getElementById('register-popup').style.display = 'none';
+  });
+});
+
+// Authentication handling
+const loginPopup = document.getElementById('login-popup');
+const registerPopup = document.getElementById('register-popup');
+const authBtn = document.getElementById('auth-btn');
+const authText = document.getElementById('auth-text');
+
+authBtn.addEventListener('click', () => {
+  if (currentUser) {
+    // Logout
+    localStorage.removeItem('token');
+    token = null;
+    currentUser = null;
+    authText.textContent = 'Login';
+    alert('Logged out successfully!');
+  } else {
+    loginPopup.style.display = 'flex';
+  }
+});
+
+document.getElementById('show-register').addEventListener('click', (e) => {
+  e.preventDefault();
+  loginPopup.style.display = 'none';
+  registerPopup.style.display = 'flex';
+});
+
+document.getElementById('show-login').addEventListener('click', (e) => {
+  e.preventDefault();
+  registerPopup.style.display = 'none';
+  loginPopup.style.display = 'flex';
+});
+
+document.getElementById('login-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const email = document.getElementById('login-email').value;
+  const password = document.getElementById('login-password').value;
+
+  try {
+    const response = await fetch('http://localhost:5001/api/users/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password })
+    });
+    const data = await response.json();
+    if (response.ok) {
+      token = data.token;
+      currentUser = data.user;
+      localStorage.setItem('token', token);
+      authText.textContent = 'Logout';
+      loginPopup.style.display = 'none';
+      alert('Logged in successfully!');
+      fetchInitialData(); // Refresh data
+    } else {
+      alert(data.message);
+    }
+  } catch (error) {
+    console.error('Login error:', error);
+    alert('An error occurred during login.');
+  }
+});
+
+document.getElementById('register-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const username = document.getElementById('register-username').value;
+  const email = document.getElementById('register-email').value;
+  const password = document.getElementById('register-password').value;
+  const thought = document.getElementById('register-thought').value;
+  const tags = document.getElementById('register-tags').value;
+  const bio = document.getElementById('register-bio').value;
+
+  try {
+    const response = await fetch('http://localhost:5001/api/users/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, email, password, thought, tags, bio })
+    });
+    const data = await response.json();
+    if (response.ok) {
+      token = data.token;
+      currentUser = data.user;
+      localStorage.setItem('token', token);
+      authText.textContent = 'Logout';
+      registerPopup.style.display = 'none';
+      alert('Registered and logged in successfully!');
+      fetchInitialData(); // Refresh data
+    } else {
+      alert(data.message);
+    }
+  } catch (error) {
+    console.error('Register error:', error);
+    alert('An error occurred during registration.');
+  }
+});
+
+// Initialize the app
+fetchInitialData();
 switchSection('match-feed');
+
+// Ensure the profile popup is hidden on page load
+document.addEventListener('DOMContentLoaded', () => {
+  document.querySelector('.profile-popup').style.display = 'none';
+});

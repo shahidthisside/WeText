@@ -56,6 +56,13 @@ const editProfileBtn = document.getElementById('edit-profile-btn');
 const auth = firebase.auth();
 const database = firebase.database();
 
+// Validation Function
+function isValidUsername(username) {
+  // Regex: Must contain at least one letter, and only allow letters and numbers, no spaces or special characters
+  const usernameRegex = /^(?=.*[a-zA-Z])[a-zA-Z0-9]+$/;
+  return usernameRegex.test(username);
+}
+
 // Event Listeners
 document.addEventListener('DOMContentLoaded', () => {
   auth.onAuthStateChanged(user => {
@@ -124,6 +131,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const tags = document.getElementById('register-tags').value || '';
     const bio = document.getElementById('register-bio').value || '';
 
+    // Validate username format
+    if (!isValidUsername(username)) {
+      alert('Username must contain at least one letter and can only include letters and numbers. No spaces, special characters, or only numbers allowed!');
+      return;
+    }
+
     // Check if username already exists
     const usernameExists = await checkUsernameExists(username);
     if (usernameExists) {
@@ -167,6 +180,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (!newUsername) {
       alert('Username cannot be empty!');
+      return;
+    }
+
+    // Validate username format
+    if (!isValidUsername(newUsername)) {
+      alert('Username must contain at least one letter and can only include letters and numbers. No spaces, special characters, or only numbers allowed!');
       return;
     }
 

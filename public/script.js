@@ -41,7 +41,6 @@ const emojiPickerContainer = document.querySelector('.emoji-picker-container');
 const fileInput = document.getElementById('file-input');
 const postInput = document.getElementById('post-input');
 const postForm = document.getElementById('post-form');
-const anonCheck = document.getElementById('anon-check');
 const postBtn = document.getElementById('post-btn');
 const thoughtBtn = document.getElementById('thought-btn');
 const themeToggle = document.getElementById('theme-toggle');
@@ -238,15 +237,16 @@ document.addEventListener('DOMContentLoaded', () => {
     const friendRequestBtn = e.target.closest('.friend-request-btn');
     const chatBtn = e.target.closest('.chat-btn');
     const removeBtn = e.target.closest('.remove-match-btn');
-    if (friendRequestBtn) {
-      const match = matches.find(m => m.username === e.target.closest('.match').querySelector('h3').textContent);
-      if (match) sendFriendRequest(match.id);
-    } else if (chatBtn) {
-      const match = matches.find(m => m.username === e.target.closest('.match').querySelector('h3').textContent);
-      if (match) startChat(match);
-    } else if (removeBtn) {
-      const match = matches.find(m => m.username === e.target.closest('.match').querySelector('h3').textContent);
-      if (match) removeFromMatches(match.id);
+    const matchElement = e.target.closest('.match');
+    const match = matches.find(m => m.username === matchElement.querySelector('h3').textContent);
+    if (match) {
+      if (friendRequestBtn) {
+        sendFriendRequest(match.id);
+      } else if (chatBtn) {
+        startChat(match);
+      } else if (removeBtn) {
+        removeFromMatches(match.id);
+      }
     }
   });
 
@@ -275,29 +275,28 @@ document.addEventListener('DOMContentLoaded', () => {
   postsFeedContent.addEventListener('click', (e) => {
     const yesBtn = e.target.closest('.yes-btn');
     const noBtn = e.target.closest('.no-btn');
+    const deleteBtn = e.target.closest('.delete-btn');
     if (yesBtn) {
       const postElement = yesBtn.closest('.post');
-      const username = postElement.querySelector('h3').textContent;
-      if (username === 'Anonymous') {
-        alert('Cannot add anonymous users to matches.');
-        return;
+      const postId = postElement.getAttribute('data-post-id');
+      const post = posts.find(p => p.id === postId);
+      if (post) {
+        addToMatches({ id: post.userId, username: post.username, match: Math.floor(Math.random() * 100) });
       }
-      database.ref('users').orderByChild('username').equalTo(username).once('value', snapshot => {
-        if (snapshot.exists()) {
-          snapshot.forEach(childSnapshot => {
-            const profile = childSnapshot.val();
-            profile.id = childSnapshot.key;
-            addToMatches(profile);
-          });
-        } else {
-          alert('User not found.');
-        }
-      });
     } else if (noBtn) {
       const postElement = noBtn.closest('.post');
       const postId = postElement.getAttribute('data-post-id');
       posts = posts.filter(p => p.id !== postId);
       renderWeirdFeed();
+    } else if (deleteBtn) {
+      const postElement = deleteBtn.closest('.post');
+      const postId = postElement.getAttribute('data-post-id');
+      const post = posts.find(p => p.id === postId);
+      if (post && post.userId === currentUser.uid) {
+        deletePost(postId);
+      } else {
+        alert('You can only delete your own posts!');
+      }
     }
   });
 
@@ -305,29 +304,28 @@ document.addEventListener('DOMContentLoaded', () => {
   thoughtsFeedContent.addEventListener('click', (e) => {
     const yesBtn = e.target.closest('.yes-btn');
     const noBtn = e.target.closest('.no-btn');
+    const deleteBtn = e.target.closest('.delete-btn');
     if (yesBtn) {
       const postElement = yesBtn.closest('.post');
-      const username = postElement.querySelector('h3').textContent;
-      if (username === 'Anonymous') {
-        alert('Cannot add anonymous users to matches.');
-        return;
+      const postId = postElement.getAttribute('data-post-id');
+      const post = posts.find(p => p.id === postId);
+      if (post) {
+        addToMatches({ id: post.userId, username: post.username, match: Math.floor(Math.random() * 100) });
       }
-      database.ref('users').orderByChild('username').equalTo(username).once('value', snapshot => {
-        if (snapshot.exists()) {
-          snapshot.forEach(childSnapshot => {
-            const profile = childSnapshot.val();
-            profile.id = childSnapshot.key;
-            addToMatches(profile);
-          });
-        } else {
-          alert('User not found.');
-        }
-      });
     } else if (noBtn) {
       const postElement = noBtn.closest('.post');
       const postId = postElement.getAttribute('data-post-id');
       posts = posts.filter(p => p.id !== postId);
       renderWeirdFeed();
+    } else if (deleteBtn) {
+      const postElement = deleteBtn.closest('.post');
+      const postId = postElement.getAttribute('data-post-id');
+      const post = posts.find(p => p.id === postId);
+      if (post && post.userId === currentUser.uid) {
+        deletePost(postId);
+      } else {
+        alert('You can only delete your own posts!');
+      }
     }
   });
 
@@ -657,22 +655,24 @@ function addToMatches(profile) {
     return;
   }
 
-  // Check if the profile is already in matches
+  // Check if the match already exists
   if (matches.some(match => match.id === profile.id)) {
-    console.warn('Profile is already in matches:', profile.id);
+    console.warn('Match already exists:', profile.id);
     alert('Already in matches!');
     return;
   }
 
-  console.log('Adding to matches:', currentUser.uid, 'with profile:', profile.id);
-  database.ref('matches/' + currentUser.uid + '/' + profile.id).set({
+  const matchData = {
     username: profile.username,
-    match: profile.match,
+    match: profile.match || Math.floor(Math.random() * 100),
     id: profile.id
-  }).then(() => {
-    matches.push(profile);
+  };
+
+  console.log('Adding to matches:', currentUser.uid, 'with profile:', matchData);
+  database.ref('matches/' + currentUser.uid + '/' + matchData.id).set(matchData).then(() => {
+    matches.push(matchData);
     renderMatches();
-    console.log('Added to matches:', profile);
+    console.log('Added to matches:', matchData);
     alert('Added to matches!');
   }).catch(error => {
     console.error('Error adding to matches:', error);
@@ -697,6 +697,24 @@ function removeFromMatches(matchId) {
   });
 }
 
+function deletePost(postId) {
+  if (!currentUser || !currentUser.uid || !postId) {
+    console.error('Cannot delete post: No current user or post ID:', { currentUser, postId });
+    alert('Please log in to delete a post.');
+    return;
+  }
+
+  database.ref('posts/' + postId).remove().then(() => {
+    console.log('Post deleted:', postId);
+    posts = posts.filter(post => post.id !== postId);
+    renderWeirdFeed();
+    alert('Post deleted successfully!');
+  }).catch(error => {
+    console.error('Error deleting post:', error);
+    alert('Failed to delete post. Check console for details.');
+  });
+}
+
 function renderWeirdFeed() {
   // Render Posts
   postsFeedContent.innerHTML = '';
@@ -705,7 +723,7 @@ function renderWeirdFeed() {
     postElement.className = 'post';
     postElement.setAttribute('data-post-id', post.id);
     postElement.innerHTML = `
-      <h3>${post.username || 'Anonymous'}</h3>
+      <h3>${post.username}</h3>
       <p>${post.content}</p>
       <p><strong>Type:</strong> ${post.type}</p>
       <p><strong>Tags:</strong> ${post.tags}</p>
@@ -715,6 +733,7 @@ function renderWeirdFeed() {
         <button class="comment-btn">Comment</button>
         <button class="yes-btn">Yes</button>
         <button class="no-btn">No</button>
+        ${post.userId === currentUser?.uid ? '<button class="delete-btn">Delete</button>' : ''}
       </div>
     `;
     postsFeedContent.appendChild(postElement);
@@ -728,7 +747,7 @@ function renderWeirdFeed() {
     postElement.className = 'post';
     postElement.setAttribute('data-post-id', post.id);
     postElement.innerHTML = `
-      <h3>${post.username || 'Anonymous'}</h3>
+      <h3>${post.username}</h3>
       <p>${post.content}</p>
       <p><strong>Type:</strong> ${post.type}</p>
       <p><strong>Tags:</strong> ${post.tags}</p>
@@ -738,6 +757,7 @@ function renderWeirdFeed() {
         <button class="comment-btn">Comment</button>
         <button class="yes-btn">Yes</button>
         <button class="no-btn">No</button>
+        ${post.userId === currentUser?.uid ? '<button class="delete-btn">Delete</button>' : ''}
       </div>
     `;
     thoughtsFeedContent.appendChild(postElement);
@@ -813,11 +833,10 @@ function renderFriendRequests() {
 
 function submitPost(type) {
   const content = postInput.value;
-  const anonymous = anonCheck.checked;
   if (content && currentUser) {
     const post = {
       userId: currentUser.uid,
-      username: anonymous ? 'Anonymous' : currentUser.username,
+      username: currentUser.username,
       content,
       timestamp: new Date().toLocaleString(),
       type,
@@ -828,7 +847,6 @@ function submitPost(type) {
     database.ref('posts').push(post).then(() => {
       console.log('Post saved:', post);
       postInput.value = '';
-      anonCheck.checked = false;
       // Switch to Weird Feed and show the appropriate tab
       switchSection('weird-feed');
       currentWeirdFeedTab = type; // 'post' or 'thought'
@@ -926,6 +944,7 @@ function removeFriend(friendId) {
 }
 
 function generateChatId(uid1, uid2) {
+  // Use real user IDs for chat IDs
   return [uid1, uid2].sort().join('_');
 }
 

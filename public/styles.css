@@ -438,10 +438,15 @@ textarea {
   margin-left: 10px;
 }
 
-/* Weird Feed */
-#feed {
+/* Weird Feed Sections */
+#posts-feed,
+#thoughts-feed {
+  display: none;
+}
+
+#posts-feed.active,
+#thoughts-feed.active {
   display: block;
-  overflow-y: auto;
 }
 
 /* Profile Popup */

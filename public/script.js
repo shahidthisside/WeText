@@ -8,6 +8,7 @@ let posts = [];
 let friendRequests = [];
 let messages = {};
 let currentChatUser = null;
+let currentWeirdFeedTab = 'posts'; // Default to "Posts" tab
 
 // DOM Elements
 const authPopup = document.getElementById('login-popup');
@@ -28,8 +29,8 @@ const profileLikes = document.getElementById('profile-likes');
 const profileComments = document.getElementById('profile-comments');
 const profileBio = document.getElementById('profile-bio');
 const matchCards = document.querySelector('.match-feed');
-const commonFeedContent = document.getElementById('common-feed-content');
-const weirdFeedContent = document.getElementById('feed');
+const postsFeedContent = document.getElementById('posts-feed');
+const thoughtsFeedContent = document.getElementById('thoughts-feed');
 const matchesSection = document.querySelector('.matches');
 const friendsSection = document.querySelector('.friends');
 const chatList = document.getElementById('chat-list');
@@ -270,38 +271,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  // Event delegation for Common Feed
-  commonFeedContent.addEventListener('click', (e) => {
-    const yesBtn = e.target.closest('.yes-btn');
-    const noBtn = e.target.closest('.no-btn');
-    if (yesBtn) {
-      const postElement = yesBtn.closest('.post');
-      const username = postElement.querySelector('h3').textContent;
-      if (username === 'Anonymous') {
-        alert('Cannot add anonymous users to matches.');
-        return;
-      }
-      database.ref('users').orderByChild('username').equalTo(username).once('value', snapshot => {
-        if (snapshot.exists()) {
-          snapshot.forEach(childSnapshot => {
-            const profile = childSnapshot.val();
-            profile.id = childSnapshot.key;
-            addToMatches(profile);
-          });
-        } else {
-          alert('User not found.');
-        }
-      });
-    } else if (noBtn) {
-      const postElement = noBtn.closest('.post');
-      const postId = postElement.getAttribute('data-post-id');
-      posts = posts.filter(p => p.id !== postId);
-      renderPosts();
-    }
-  });
-
-  // Event delegation for Weird Feed
-  weirdFeedContent.addEventListener('click', (e) => {
+  // Event delegation for Posts Feed in Weird Feed
+  postsFeedContent.addEventListener('click', (e) => {
     const yesBtn = e.target.closest('.yes-btn');
     const noBtn = e.target.closest('.no-btn');
     if (yesBtn) {
@@ -329,6 +300,48 @@ document.addEventListener('DOMContentLoaded', () => {
       renderWeirdFeed();
     }
   });
+
+  // Event delegation for Thoughts Feed in Weird Feed
+  thoughtsFeedContent.addEventListener('click', (e) => {
+    const yesBtn = e.target.closest('.yes-btn');
+    const noBtn = e.target.closest('.no-btn');
+    if (yesBtn) {
+      const postElement = yesBtn.closest('.post');
+      const username = postElement.querySelector('h3').textContent;
+      if (username === 'Anonymous') {
+        alert('Cannot add anonymous users to matches.');
+        return;
+      }
+      database.ref('users').orderByChild('username').equalTo(username).once('value', snapshot => {
+        if (snapshot.exists()) {
+          snapshot.forEach(childSnapshot => {
+            const profile = childSnapshot.val();
+            profile.id = childSnapshot.key;
+            addToMatches(profile);
+          });
+        } else {
+          alert('User not found.');
+        }
+      });
+    } else if (noBtn) {
+      const postElement = noBtn.closest('.post');
+      const postId = postElement.getAttribute('data-post-id');
+      posts = posts.filter(p => p.id !== postId);
+      renderWeirdFeed();
+    }
+  });
+
+  // Event delegation for Weird Feed toggle buttons
+  document.querySelector('.weird-feed .toggle-buttons').addEventListener('click', (e) => {
+    const toggleBtn = e.target.closest('.toggle-btn');
+    if (toggleBtn) {
+      const type = toggleBtn.getAttribute('data-type');
+      currentWeirdFeedTab = type;
+      document.querySelectorAll('.weird-feed .toggle-btn').forEach(btn => btn.classList.remove('active'));
+      toggleBtn.classList.add('active');
+      renderWeirdFeed();
+    }
+  });
 });
 
 function handleAuthAction() {
@@ -340,8 +353,8 @@ function handleAuthAction() {
       authText.textContent = 'Login';
       authBtn.setAttribute('data-action', 'login');
       matchCards.innerHTML = '';
-      commonFeedContent.innerHTML = '';
-      weirdFeedContent.innerHTML = '';
+      postsFeedContent.innerHTML = '';
+      thoughtsFeedContent.innerHTML = '';
       matchesSection.innerHTML = '<h2>Your Matches</h2>';
       friendsSection.innerHTML = '<h2>Your Friends</h2>';
       chatList.innerHTML = '<p>Select a match or friend to chat!</p>';
@@ -353,6 +366,14 @@ function switchSection(sectionId) {
   document.querySelectorAll('section').forEach(section => section.classList.remove('active'));
   document.getElementById(sectionId).classList.add('active');
   currentSection = sectionId;
+
+  // Reset Weird Feed tab to "Posts" when switching to Weird Feed
+  if (sectionId === 'weird-feed') {
+    currentWeirdFeedTab = 'posts';
+    document.querySelectorAll('.weird-feed .toggle-btn').forEach(btn => btn.classList.remove('active'));
+    document.querySelector('.weird-feed .toggle-btn[data-type="posts"]').classList.add('active');
+    renderWeirdFeed();
+  }
 }
 
 function fetchUserProfile(uid) {
@@ -412,7 +433,6 @@ function fetchPosts() {
       posts.push(post);
     });
     console.log('Fetched posts:', posts);
-    renderPosts();
     renderWeirdFeed();
   }, error => console.error('Error fetching posts:', error));
 }
@@ -677,8 +697,9 @@ function removeFromMatches(matchId) {
   });
 }
 
-function renderPosts() {
-  commonFeedContent.innerHTML = '';
+function renderWeirdFeed() {
+  // Render Posts
+  postsFeedContent.innerHTML = '';
   posts.filter(post => post.type === 'post').forEach(post => {
     const postElement = document.createElement('div');
     postElement.className = 'post';
@@ -696,13 +717,12 @@ function renderPosts() {
         <button class="no-btn">No</button>
       </div>
     `;
-    commonFeedContent.appendChild(postElement);
+    postsFeedContent.appendChild(postElement);
   });
-  if (!commonFeedContent.innerHTML) commonFeedContent.innerHTML = '<p>No posts in Common Feed.</p>';
-}
+  if (!postsFeedContent.innerHTML) postsFeedContent.innerHTML = '<p>No posts in Weird Feed.</p>';
 
-function renderWeirdFeed() {
-  weirdFeedContent.innerHTML = '';
+  // Render Thoughts
+  thoughtsFeedContent.innerHTML = '';
   posts.filter(post => post.type === 'thought').forEach(post => {
     const postElement = document.createElement('div');
     postElement.className = 'post';
@@ -720,9 +740,13 @@ function renderWeirdFeed() {
         <button class="no-btn">No</button>
       </div>
     `;
-    weirdFeedContent.appendChild(postElement);
+    thoughtsFeedContent.appendChild(postElement);
   });
-  if (!weirdFeedContent.innerHTML) weirdFeedContent.innerHTML = '<p>No thoughts in Weird Feed.</p>';
+  if (!thoughtsFeedContent.innerHTML) thoughtsFeedContent.innerHTML = '<p>No thoughts in Weird Feed.</p>';
+
+  // Toggle visibility based on current tab
+  postsFeedContent.classList.toggle('active', currentWeirdFeedTab === 'posts');
+  thoughtsFeedContent.classList.toggle('active', currentWeirdFeedTab === 'thoughts');
 }
 
 function renderMatches() {
@@ -794,13 +818,23 @@ function submitPost(type) {
     const post = {
       userId: currentUser.uid,
       username: anonymous ? 'Anonymous' : currentUser.username,
-      content, timestamp: new Date().toLocaleString(),
-      type, tags: currentUser.tags || '', likes: 0, comments: []
+      content,
+      timestamp: new Date().toLocaleString(),
+      type,
+      tags: currentUser.tags || '',
+      likes: 0,
+      comments: []
     };
     database.ref('posts').push(post).then(() => {
       console.log('Post saved:', post);
       postInput.value = '';
       anonCheck.checked = false;
+      // Switch to Weird Feed and show the appropriate tab
+      switchSection('weird-feed');
+      currentWeirdFeedTab = type; // 'post' or 'thought'
+      document.querySelectorAll('.weird-feed .toggle-btn').forEach(btn => btn.classList.remove('active'));
+      document.querySelector(`.weird-feed .toggle-btn[data-type="${type}s"]`).classList.add('active');
+      renderWeirdFeed();
     }).catch(error => console.error('Error saving post:', error));
   }
 }
@@ -885,71 +919,53 @@ function removeFriend(friendId) {
   }).catch(error => console.error('Error removing friend from current user:', error));
 
   database.ref('friends/' + friendId + '/' + currentUser.uid).remove().then(() => {
-    console.log('Removed current user from friend:', friendId, 'user ID:', currentUser.uid);
+    console.log('Removed current user from friend:', friendId);
+    friends = friends.filter(friend => friend.id !== friendId);
+    renderFriends();
   }).catch(error => console.error('Error removing current user from friend:', error));
-
-  fetchFriends();
 }
 
-function generateChatId(userId1, userId2) {
-  return [userId1, userId2].sort().join('_');
+function generateChatId(uid1, uid2) {
+  return [uid1, uid2].sort().join('_');
 }
 
 function startChat(user) {
   currentChatUser = user;
+  switchSection('chat-section');
+  chatList.innerHTML = '';
   const chatId = generateChatId(currentUser.uid, user.id);
-  console.log('Starting chat with:', user.username, 'Chat ID:', chatId);
-  database.ref('messages/' + chatId + '/users').set({
-    [currentUser.uid]: true,
-    [user.id]: true
-  }).then(() => {
-    switchSection('chat-section');
-    document.querySelector('.chat-header h2').textContent = `Chat with ${user.username}`;
-    renderChat(chatId);
-  }).catch(error => console.error('Error setting up chat:', error));
-}
-
-function sendMessage(message) {
-  if (!currentChatUser || !currentUser) {
-    console.error('No current chat user or current user:', { currentChatUser, currentUser });
-    return;
-  }
-  const chatId = generateChatId(currentUser.uid, currentChatUser.id);
-  console.log('Sending message to chat ID:', chatId, 'Message:', message);
-  const messageData = {
-    userId: currentUser.uid,
-    username: currentUser.username,
-    content: message,
-    timestamp: new Date().toLocaleString()
-  };
-  database.ref('messages/' + chatId + '/messages').push(messageData).then(() => {
-    console.log('Message sent successfully:', messageData);
-  }).catch(error => {
-    console.error('Error sending message:', error);
-    alert('Failed to send message. Check console for details.');
+  database.ref('messages/' + chatId).on('value', snapshot => {
+    messages = snapshot.val() || {};
+    chatList.innerHTML = '';
+    Object.entries(messages).forEach(([key, message]) => {
+      const messageElement = document.createElement('div');
+      messageElement.className = `message ${message.senderId === currentUser.uid ? 'sent' : 'received'}`;
+      messageElement.innerHTML = `
+        <div class="message-body">
+          <div class="message-content">${message.content}</div>
+          <div class="message-meta">${new Date(message.timestamp).toLocaleTimeString()}</div>
+        </div>
+      `;
+      chatList.appendChild(messageElement);
+    });
+    chatList.scrollTop = chatList.scrollHeight;
   });
 }
 
-function renderChat(chatId) {
-  chatList.innerHTML = '';
-  if (currentChatUser) {
-    database.ref('messages/' + chatId + '/messages').on('value', snapshot => {
-      chatList.innerHTML = '';
-      if (!snapshot.exists()) {
-        chatList.innerHTML = '<p>Start the conversation!</p>';
-        return;
-      }
-      snapshot.forEach(childSnapshot => {
-        const msg = childSnapshot.val();
-        const msgElement = document.createElement('div');
-        msgElement.className = 'message ' + (msg.userId === currentUser.uid ? 'sent' : 'received');
-        msgElement.innerHTML = `<p>${msg.username}: ${msg.content} <span class="timestamp">${msg.timestamp}</span></p>`;
-        chatList.appendChild(msgElement);
-      });
-      chatList.scrollTop = chatList.scrollHeight;
-      console.log('Chat updated for chatId:', chatId);
-    }, error => console.error('Error fetching messages:', error));
-  } else {
-    chatList.innerHTML = '<p>Select a match or friend to chat!</p>';
+function sendMessage(content) {
+  if (!currentChatUser || !currentUser || !currentUser.uid) {
+    console.error('Cannot send message: No current user or chat user:', { currentUser, currentChatUser });
+    alert('Please log in and select a chat partner.');
+    return;
   }
+  const chatId = generateChatId(currentUser.uid, currentChatUser.id);
+  const message = {
+    content,
+    senderId: currentUser.uid,
+    senderUsername: currentUser.username,
+    timestamp: Date.now()
+  };
+  database.ref('messages/' + chatId).push(message).then(() => {
+    console.log('Message sent:', message);
+  }).catch(error => console.error('Error sending message:', error));
 }

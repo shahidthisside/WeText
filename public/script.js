@@ -211,7 +211,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  // Event delegation for dynamic buttons
+  // Event delegation for dynamic buttons in match cards
   matchCards.addEventListener('click', (e) => {
     const yesBtn = e.target.closest('.yes-btn');
     const noBtn = e.target.closest('.no-btn');
@@ -232,18 +232,24 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
+  // Event delegation for matches section
   matchesSection.addEventListener('click', (e) => {
     const friendRequestBtn = e.target.closest('.friend-request-btn');
     const chatBtn = e.target.closest('.chat-btn');
+    const removeBtn = e.target.closest('.remove-match-btn');
     if (friendRequestBtn) {
       const match = matches.find(m => m.username === e.target.closest('.match').querySelector('h3').textContent);
       if (match) sendFriendRequest(match.id);
     } else if (chatBtn) {
       const match = matches.find(m => m.username === e.target.closest('.match').querySelector('h3').textContent);
       if (match) startChat(match);
+    } else if (removeBtn) {
+      const match = matches.find(m => m.username === e.target.closest('.match').querySelector('h3').textContent);
+      if (match) removeFromMatches(match.id);
     }
   });
 
+  // Event delegation for friends section
   friendsSection.addEventListener('click', (e) => {
     const chatBtn = e.target.closest('.chat-btn');
     const removeBtn = e.target.closest('.remove-friend-btn');
@@ -261,6 +267,66 @@ document.addEventListener('DOMContentLoaded', () => {
     } else if (rejectBtn) {
       const requestId = rejectBtn.getAttribute('data-request-id');
       rejectFriendRequest(requestId);
+    }
+  });
+
+  // Event delegation for Common Feed
+  commonFeedContent.addEventListener('click', (e) => {
+    const yesBtn = e.target.closest('.yes-btn');
+    const noBtn = e.target.closest('.no-btn');
+    if (yesBtn) {
+      const postElement = yesBtn.closest('.post');
+      const username = postElement.querySelector('h3').textContent;
+      if (username === 'Anonymous') {
+        alert('Cannot add anonymous users to matches.');
+        return;
+      }
+      database.ref('users').orderByChild('username').equalTo(username).once('value', snapshot => {
+        if (snapshot.exists()) {
+          snapshot.forEach(childSnapshot => {
+            const profile = childSnapshot.val();
+            profile.id = childSnapshot.key;
+            addToMatches(profile);
+          });
+        } else {
+          alert('User not found.');
+        }
+      });
+    } else if (noBtn) {
+      const postElement = noBtn.closest('.post');
+      const postId = postElement.getAttribute('data-post-id');
+      posts = posts.filter(p => p.id !== postId);
+      renderPosts();
+    }
+  });
+
+  // Event delegation for Weird Feed
+  weirdFeedContent.addEventListener('click', (e) => {
+    const yesBtn = e.target.closest('.yes-btn');
+    const noBtn = e.target.closest('.no-btn');
+    if (yesBtn) {
+      const postElement = yesBtn.closest('.post');
+      const username = postElement.querySelector('h3').textContent;
+      if (username === 'Anonymous') {
+        alert('Cannot add anonymous users to matches.');
+        return;
+      }
+      database.ref('users').orderByChild('username').equalTo(username).once('value', snapshot => {
+        if (snapshot.exists()) {
+          snapshot.forEach(childSnapshot => {
+            const profile = childSnapshot.val();
+            profile.id = childSnapshot.key;
+            addToMatches(profile);
+          });
+        } else {
+          alert('User not found.');
+        }
+      });
+    } else if (noBtn) {
+      const postElement = noBtn.closest('.post');
+      const postId = postElement.getAttribute('data-post-id');
+      posts = posts.filter(p => p.id !== postId);
+      renderWeirdFeed();
     }
   });
 });
@@ -356,12 +422,19 @@ function fetchMatches() {
     console.warn('Cannot fetch matches: currentUser or uid is missing:', currentUser);
     return;
   }
-  database.ref('matches/' + currentUser.uid).once('value', snapshot => {
+  database.ref('matches/' + currentUser.uid).on('value', snapshot => {
     matches = [];
+    if (!snapshot.exists()) {
+      console.log('No matches found.');
+      renderMatches();
+      return;
+    }
     snapshot.forEach(childSnapshot => {
       const match = childSnapshot.val();
       match.id = childSnapshot.key;
-      matches.push(match);
+      if (!matches.some(m => m.id === match.id)) {
+        matches.push(match);
+      }
     });
     console.log('Fetched matches:', matches);
     renderMatches();
@@ -556,17 +629,51 @@ function addToMatches(profile) {
     alert('Please log in to add matches.');
     return;
   }
+
+  // Check if the profile is the current user
+  if (profile.id === currentUser.uid) {
+    console.warn('Cannot add yourself to matches:', profile.id);
+    alert('You cannot add yourself to matches!');
+    return;
+  }
+
+  // Check if the profile is already in matches
+  if (matches.some(match => match.id === profile.id)) {
+    console.warn('Profile is already in matches:', profile.id);
+    alert('Already in matches!');
+    return;
+  }
+
   console.log('Adding to matches:', currentUser.uid, 'with profile:', profile.id);
   database.ref('matches/' + currentUser.uid + '/' + profile.id).set({
     username: profile.username,
-    match: profile.match
+    match: profile.match,
+    id: profile.id
   }).then(() => {
     matches.push(profile);
     renderMatches();
     console.log('Added to matches:', profile);
+    alert('Added to matches!');
   }).catch(error => {
     console.error('Error adding to matches:', error);
     alert('Failed to add to matches. Check console for details.');
+  });
+}
+
+function removeFromMatches(matchId) {
+  if (!currentUser || !currentUser.uid || !matchId) {
+    console.error('Cannot remove from matches: No current user or match ID:', { currentUser, matchId });
+    alert('Please log in to remove matches.');
+    return;
+  }
+
+  database.ref('matches/' + currentUser.uid + '/' + matchId).remove().then(() => {
+    console.log('Removed from matches:', matchId);
+    matches = matches.filter(match => match.id !== matchId);
+    renderMatches();
+  }).catch(error => {
+    console.error('Error removing from matches:', error);
+    alert('Failed to remove from matches. Check console for details.');
   });
 }
 
@@ -575,6 +682,7 @@ function renderPosts() {
   posts.filter(post => post.type === 'post').forEach(post => {
     const postElement = document.createElement('div');
     postElement.className = 'post';
+    postElement.setAttribute('data-post-id', post.id);
     postElement.innerHTML = `
       <h3>${post.username || 'Anonymous'}</h3>
       <p>${post.content}</p>
@@ -584,6 +692,8 @@ function renderPosts() {
       <div class="buttons">
         <button class="like-btn">Like (${post.likes || 0})</button>
         <button class="comment-btn">Comment</button>
+        <button class="yes-btn">Yes</button>
+        <button class="no-btn">No</button>
       </div>
     `;
     commonFeedContent.appendChild(postElement);
@@ -596,6 +706,7 @@ function renderWeirdFeed() {
   posts.filter(post => post.type === 'thought').forEach(post => {
     const postElement = document.createElement('div');
     postElement.className = 'post';
+    postElement.setAttribute('data-post-id', post.id);
     postElement.innerHTML = `
       <h3>${post.username || 'Anonymous'}</h3>
       <p>${post.content}</p>
@@ -605,6 +716,8 @@ function renderWeirdFeed() {
       <div class="buttons">
         <button class="like-btn">Like (${post.likes || 0})</button>
         <button class="comment-btn">Comment</button>
+        <button class="yes-btn">Yes</button>
+        <button class="no-btn">No</button>
       </div>
     `;
     weirdFeedContent.appendChild(postElement);
@@ -614,7 +727,8 @@ function renderWeirdFeed() {
 
 function renderMatches() {
   matchesSection.innerHTML = '<h2>Your Matches</h2>';
-  matches.forEach(match => {
+  const uniqueMatches = Array.from(new Map(matches.map(match => [match.id, match])).values());
+  uniqueMatches.forEach(match => {
     const matchElement = document.createElement('div');
     matchElement.className = 'match';
     matchElement.innerHTML = `
@@ -623,6 +737,7 @@ function renderMatches() {
       <div class="buttons">
         <button class="friend-request-btn">Send Friend Request</button>
         <button class="chat-btn">Chat</button>
+        <button class="remove-match-btn">Remove</button>
       </div>
     `;
     matchesSection.appendChild(matchElement);
@@ -644,7 +759,7 @@ function renderFriends() {
     `;
     friendsSection.appendChild(friendElement);
   });
-  renderFriendRequests(); // Ensure friend requests are rendered after friends
+  renderFriendRequests();
 }
 
 function renderFriendRequests() {
@@ -666,7 +781,6 @@ function renderFriendRequests() {
       requestsContainer.appendChild(requestElement);
     });
   }
-  // Clear previous friend requests and append new ones
   const existingRequests = friendsSection.querySelector('.friend-requests');
   if (existingRequests) existingRequests.remove();
   requestsContainer.className = 'friend-requests';
@@ -703,7 +817,6 @@ function sendFriendRequest(friendId) {
     return;
   }
 
-  // Check if the user is already a friend
   const isAlreadyFriend = friends.some(friend => friend.id === friendId);
   if (isAlreadyFriend) {
     console.warn('User is already a friend:', friendId);
@@ -711,7 +824,6 @@ function sendFriendRequest(friendId) {
     return;
   }
 
-  // Check if a friend request already exists
   database.ref('friend_requests/' + friendId + '/' + currentUser.uid).once('value', snapshot => {
     if (snapshot.exists()) {
       console.warn('Friend request already exists for:', friendId);

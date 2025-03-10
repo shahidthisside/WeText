@@ -22,12 +22,11 @@ const showLogin = document.getElementById('show-login');
 const userAvatar = document.getElementById('profile-avatar');
 const profilePopup = document.querySelector('.profile-popup');
 const profileUsername = document.getElementById('profile-username');
-const profileThought = document.getElementById('profile-thought');
-const profileTags = document.getElementById('profile-tags');
-const profileMatch = document.getElementById('profile-match');
-const profileLikes = document.getElementById('profile-likes');
-const profileComments = document.getElementById('profile-comments');
+const profileName = document.getElementById('profile-name');
 const profileBio = document.getElementById('profile-bio');
+const editUsernameInput = document.getElementById('edit-username');
+const editBioInput = document.getElementById('edit-bio');
+const editProfileForm = document.getElementById('edit-profile-form');
 const matchCards = document.querySelector('.match-feed');
 const postsFeedContent = document.getElementById('posts-feed');
 const thoughtsFeedContent = document.getElementById('thoughts-feed');
@@ -51,6 +50,7 @@ const matchSort = document.getElementById('match-sort');
 const backBtn = document.querySelector('.back-btn');
 const clearChatBtn = document.getElementById('clear-chat');
 const typingIndicator = document.getElementById('typing-indicator');
+const editProfileBtn = document.getElementById('edit-profile-btn');
 
 // Firebase Authentication and Database
 const auth = firebase.auth();
@@ -64,17 +64,19 @@ document.addEventListener('DOMContentLoaded', () => {
       authText.textContent = 'Logout';
       authBtn.setAttribute('data-action', 'logout');
       console.log('User logged in:', currentUser);
-      fetchUserProfile(user.uid);
+      fetchUserProfile(user.uid); // Fetch user profile for display in "My Profile" section
       fetchProfiles();
       fetchPosts();
       fetchMatches();
       fetchFriends();
       fetchFriendRequests();
+      switchSection('match-feed'); // Default to match-feed on login
     } else {
       authText.textContent = 'Login';
       authBtn.setAttribute('data-action', 'login');
       currentUser = null;
       authPopup.style.display = 'flex';
+      clearProfileSection(); // Clear profile section when logged out
     }
   });
 
@@ -113,7 +115,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }).catch(error => alert(error.message));
   });
 
-  registerForm.addEventListener('submit', (e) => {
+  registerForm.addEventListener('submit', async (e) => {
     e.preventDefault();
     const username = document.getElementById('register-username').value;
     const email = document.getElementById('register-email').value;
@@ -121,13 +123,28 @@ document.addEventListener('DOMContentLoaded', () => {
     const thought = document.getElementById('register-thought').value || '';
     const tags = document.getElementById('register-tags').value || '';
     const bio = document.getElementById('register-bio').value || '';
+
+    // Check if username already exists
+    const usernameExists = await checkUsernameExists(username);
+    if (usernameExists) {
+      alert('Username already taken! Please choose a different username.');
+      return;
+    }
+
     auth.createUserWithEmailAndPassword(email, password).then(userCredential => {
       currentUser = { ...userCredential.user, uid: userCredential.user.uid };
       console.log('User registered:', currentUser);
       return database.ref('users/' + currentUser.uid).set({
-        username, email, thought, tags, bio,
+        name: username, // Using username as name for simplicity; can be modified to add a separate name field
+        username,
+        email,
+        thought,
+        tags,
+        bio,
         avatar: `https://placehold.co/40/8a4af3/ffffff?text=${username.charAt(0).toUpperCase()}`,
-        likes: 0, comments: 0, match: Math.floor(Math.random() * 100)
+        likes: 0,
+        comments: 0,
+        match: Math.floor(Math.random() * 100)
       });
     }).then(() => {
       registerPopup.style.display = 'none';
@@ -135,7 +152,96 @@ document.addEventListener('DOMContentLoaded', () => {
     }).catch(error => alert(error.message));
   });
 
-  document.getElementById('edit-profile')?.addEventListener('click', () => { if (currentUser) showProfile(currentUser.uid); });
+  editProfileBtn?.addEventListener('click', () => {
+    if (currentUser) {
+      editUsernameInput.value = currentUser.username;
+      editBioInput.value = currentUser.bio || '';
+      profilePopup.style.display = 'flex';
+    }
+  });
+
+  editProfileForm?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const newUsername = editUsernameInput.value.trim();
+    const newBio = editBioInput.value.trim();
+
+    if (!newUsername) {
+      alert('Username cannot be empty!');
+      return;
+    }
+
+    // Check if the new username is different and already taken
+    if (newUsername !== currentUser.username) {
+      const usernameExists = await checkUsernameExists(newUsername);
+      if (usernameExists) {
+        alert('Username already taken! Please choose a different username.');
+        return;
+      }
+    }
+
+    // Update user data in Firebase
+    const updates = {};
+    updates['users/' + currentUser.uid + '/username'] = newUsername;
+    updates['users/' + currentUser.uid + '/bio'] = newBio;
+    updates['users/' + currentUser.uid + '/avatar'] = `https://placehold.co/40/8a4af3/ffffff?text=${newUsername.charAt(0).toUpperCase()}`;
+
+    // Update all posts by this user with the new username
+    const postsSnapshot = await database.ref('posts').once('value');
+    postsSnapshot.forEach(childSnapshot => {
+      const post = childSnapshot.val();
+      if (post.userId === currentUser.uid) {
+        updates['posts/' + childSnapshot.key + '/username'] = newUsername;
+      }
+    });
+
+    // Update matches and friends with the new username
+    const matchesRef = database.ref('matches/' + currentUser.uid);
+    matchesSnapshot = await matchesRef.once('value');
+    matchesSnapshot.forEach(childSnapshot => {
+      updates['matches/' + currentUser.uid + '/' + childSnapshot.key + '/username'] = newUsername;
+    });
+
+    const friendsRef = database.ref('friends/' + currentUser.uid);
+    friendsSnapshot = await friendsRef.once('value');
+    friendsSnapshot.forEach(childSnapshot => {
+      updates['friends/' + currentUser.uid + '/' + childSnapshot.key + '/username'] = newUsername;
+    });
+
+    // Update friend requests
+    const friendRequestsRef = database.ref('friend_requests/' + currentUser.uid);
+    friendRequestsSnapshot = await friendRequestsRef.once('value');
+    friendRequestsSnapshot.forEach(childSnapshot => {
+      updates['friend_requests/' + currentUser.uid + '/' + childSnapshot.key + '/username'] = newUsername;
+    });
+
+    // Update other users' matches and friends
+    const allUsersRef = database.ref('users');
+    allUsersSnapshot = await allUsersRef.once('value');
+    allUsersSnapshot.forEach(userSnapshot => {
+      const userId = userSnapshot.key;
+      if (userId !== currentUser.uid) {
+        updates['matches/' + userId + '/' + currentUser.uid + '/username'] = newUsername;
+        updates['friends/' + userId + '/' + currentUser.uid + '/username'] = newUsername;
+      }
+    });
+
+    database.ref().update(updates).then(() => {
+      alert('Profile updated successfully!');
+      fetchUserProfile(currentUser.uid);
+      profilePopup.style.display = 'none';
+      // Update currentUser object
+      currentUser.username = newUsername;
+      currentUser.bio = newBio;
+      // Refresh other sections to reflect the new username
+      fetchPosts();
+      fetchMatches();
+      fetchFriends();
+      fetchFriendRequests();
+    }).catch(error => {
+      console.error('Error updating profile:', error);
+      alert('Failed to update profile. Please try again.');
+    });
+  });
 
   chatForm.addEventListener('submit', (e) => {
     e.preventDefault();
@@ -356,6 +462,7 @@ function handleAuthAction() {
       matchesSection.innerHTML = '<h2>Your Matches</h2>';
       friendsSection.innerHTML = '<h2>Your Friends</h2>';
       chatList.innerHTML = '<p>Select a match or friend to chat!</p>';
+      clearProfileSection();
     }).catch(error => alert(error.message));
   }
 }
@@ -374,6 +481,18 @@ function switchSection(sectionId) {
   }
 }
 
+async function checkUsernameExists(username) {
+  const snapshot = await database.ref('users').once('value');
+  let exists = false;
+  snapshot.forEach(childSnapshot => {
+    const user = childSnapshot.val();
+    if (user.username === username) {
+      exists = true;
+    }
+  });
+  return exists;
+}
+
 function fetchUserProfile(uid) {
   database.ref('users/' + uid).once('value', snapshot => {
     const userData = snapshot.val();
@@ -385,17 +504,23 @@ function fetchUserProfile(uid) {
         console.warn('Failed to load avatar, using fallback image');
         userAvatar.src = 'https://placehold.co/40/8a4af3/ffffff?text=U';
       };
+      // Update the My Profile section
+      profileName.textContent = userData.name;
       profileUsername.textContent = userData.username;
-      profileThought.textContent = userData.thought;
-      profileTags.textContent = userData.tags;
-      profileMatch.textContent = userData.match;
-      profileLikes.textContent = userData.likes;
-      profileComments.textContent = userData.comments;
-      profileBio.textContent = userData.bio;
+      profileBio.textContent = userData.bio || 'No bio provided.';
+      userAvatar.src = userData.avatar; // Update avatar in the My Profile section
     } else {
       console.warn('No user data found for UID:', uid);
+      clearProfileSection();
     }
   }, error => console.error('Error fetching user profile:', error));
+}
+
+function clearProfileSection() {
+  profileName.textContent = '';
+  profileUsername.textContent = '';
+  profileBio.textContent = '';
+  userAvatar.src = '';
 }
 
 function fetchProfiles() {
@@ -648,14 +773,12 @@ function addToMatches(profile) {
     return;
   }
 
-  // Check if the profile is the current user
   if (profile.id === currentUser.uid) {
     console.warn('Cannot add yourself to matches:', profile.id);
     alert('You cannot add yourself to matches!');
     return;
   }
 
-  // Check if the match already exists
   if (matches.some(match => match.id === profile.id)) {
     console.warn('Match already exists:', profile.id);
     alert('Already in matches!');
@@ -716,7 +839,6 @@ function deletePost(postId) {
 }
 
 function renderWeirdFeed() {
-  // Render Posts
   postsFeedContent.innerHTML = '';
   posts.filter(post => post.type === 'post').forEach(post => {
     const postElement = document.createElement('div');
@@ -740,7 +862,6 @@ function renderWeirdFeed() {
   });
   if (!postsFeedContent.innerHTML) postsFeedContent.innerHTML = '<p>No posts in Weird Feed.</p>';
 
-  // Render Thoughts
   thoughtsFeedContent.innerHTML = '';
   posts.filter(post => post.type === 'thought').forEach(post => {
     const postElement = document.createElement('div');
@@ -764,7 +885,6 @@ function renderWeirdFeed() {
   });
   if (!thoughtsFeedContent.innerHTML) thoughtsFeedContent.innerHTML = '<p>No thoughts in Weird Feed.</p>';
 
-  // Toggle visibility based on current tab
   postsFeedContent.classList.toggle('active', currentWeirdFeedTab === 'posts');
   thoughtsFeedContent.classList.toggle('active', currentWeirdFeedTab === 'thoughts');
 }
@@ -847,19 +967,13 @@ function submitPost(type) {
     database.ref('posts').push(post).then(() => {
       console.log('Post saved:', post);
       postInput.value = '';
-      // Switch to Weird Feed and show the appropriate tab
       switchSection('weird-feed');
-      currentWeirdFeedTab = type; // 'post' or 'thought'
+      currentWeirdFeedTab = type;
       document.querySelectorAll('.weird-feed .toggle-btn').forEach(btn => btn.classList.remove('active'));
       document.querySelector(`.weird-feed .toggle-btn[data-type="${type}s"]`).classList.add('active');
       renderWeirdFeed();
     }).catch(error => console.error('Error saving post:', error));
   }
-}
-
-function showProfile(uid) {
-  fetchUserProfile(uid);
-  profilePopup.style.display = 'flex';
 }
 
 function sendFriendRequest(friendId) {
@@ -944,7 +1058,6 @@ function removeFriend(friendId) {
 }
 
 function generateChatId(uid1, uid2) {
-  // Use real user IDs for chat IDs
   return [uid1, uid2].sort().join('_');
 }
 

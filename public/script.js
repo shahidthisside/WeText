@@ -1,62 +1,446 @@
-// Global state
+// State Management
 let currentUser = null;
-let token = localStorage.getItem('token') || null;
+let currentSection = 'match-feed';
 let profiles = [];
 let matches = [];
 let friends = [];
 let posts = [];
-let thoughts = [];
-let chatHistories = {};
-let isTyping = false;
-let replyingToMessage = null;
+let friendRequests = [];
+let messages = {};
+let currentChatUser = null;
 
-// Check if user is already logged in
-if (token) {
-  try {
-    fetch('http://localhost:5001/api/users', {
-      headers: { 'Authorization': `Bearer ${token}` }
-    })
-      .then(res => res.json())
-      .then(data => {
-        currentUser = data.find(u => u.id === JSON.parse(atob(token.split('.')[1])).id);
-        if (currentUser) {
-          document.getElementById('auth-text').textContent = 'Logout';
-        } else {
-          localStorage.removeItem('token');
-          token = null;
-        }
+// DOM Elements
+const authPopup = document.getElementById('login-popup');
+const registerPopup = document.getElementById('register-popup');
+const loginForm = document.getElementById('login-form');
+const registerForm = document.getElementById('register-form');
+const authBtn = document.getElementById('auth-btn');
+const authText = document.getElementById('auth-text');
+const showRegister = document.getElementById('show-register');
+const showLogin = document.getElementById('show-login');
+const userAvatar = document.getElementById('profile-avatar');
+const profilePopup = document.querySelector('.profile-popup');
+const profileUsername = document.getElementById('profile-username');
+const profileThought = document.getElementById('profile-thought');
+const profileTags = document.getElementById('profile-tags');
+const profileMatch = document.getElementById('profile-match');
+const profileLikes = document.getElementById('profile-likes');
+const profileComments = document.getElementById('profile-comments');
+const profileBio = document.getElementById('profile-bio');
+const matchCards = document.querySelector('.match-feed');
+const commonFeedContent = document.getElementById('common-feed-content');
+const weirdFeedContent = document.getElementById('feed');
+const matchesSection = document.querySelector('.matches');
+const friendsSection = document.querySelector('.friends');
+const chatList = document.getElementById('chat-list');
+const chatInput = document.getElementById('chat-input');
+const chatForm = document.getElementById('chat-form');
+const emojiBtn = document.getElementById('emoji-btn');
+const emojiPickerContainer = document.querySelector('.emoji-picker-container');
+const fileInput = document.getElementById('file-input');
+const postInput = document.getElementById('post-input');
+const postForm = document.getElementById('post-form');
+const anonCheck = document.getElementById('anon-check');
+const postBtn = document.getElementById('post-btn');
+const thoughtBtn = document.getElementById('thought-btn');
+const themeToggle = document.getElementById('theme-toggle');
+const usernameSearch = document.getElementById('username-search');
+const searchBtn = document.getElementById('search-btn');
+const matchFilter = document.getElementById('match-filter');
+const matchSort = document.getElementById('match-sort');
+const backBtn = document.querySelector('.back-btn');
+const clearChatBtn = document.getElementById('clear-chat');
+const typingIndicator = document.getElementById('typing-indicator');
+
+// Firebase Authentication and Database
+const auth = firebase.auth();
+const database = firebase.database();
+
+// Event Listeners
+document.addEventListener('DOMContentLoaded', () => {
+  auth.onAuthStateChanged(user => {
+    if (user) {
+      currentUser = { ...user, uid: user.uid };
+      authText.textContent = 'Logout';
+      authBtn.setAttribute('data-action', 'logout');
+      console.log('User logged in:', currentUser);
+      fetchUserProfile(user.uid);
+      fetchProfiles();
+      fetchPosts();
+      fetchMatches();
+      fetchFriends();
+      fetchFriendRequests();
+    } else {
+      authText.textContent = 'Login';
+      authBtn.setAttribute('data-action', 'login');
+      currentUser = null;
+      authPopup.style.display = 'flex';
+    }
+  });
+
+  document.querySelectorAll('.nav-item').forEach(item => {
+    item.addEventListener('click', () => {
+      if (item.id === 'auth-btn') {
+        handleAuthAction();
+      } else {
+        switchSection(item.getAttribute('data-section'));
+        document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
+        item.classList.add('active');
+      }
+    });
+  });
+
+  themeToggle.addEventListener('click', () => {
+    document.body.classList.toggle('dark-mode');
+    document.body.classList.toggle('light-mode');
+    themeToggle.classList.toggle('light');
+    themeToggle.classList.toggle('dark');
+  });
+
+  authBtn.addEventListener('click', handleAuthAction);
+  showRegister.addEventListener('click', (e) => { e.preventDefault(); authPopup.style.display = 'none'; registerPopup.style.display = 'flex'; });
+  showLogin.addEventListener('click', (e) => { e.preventDefault(); registerPopup.style.display = 'none'; authPopup.style.display = 'flex'; });
+  document.querySelectorAll('.close-btn').forEach(btn => btn.addEventListener('click', () => { authPopup.style.display = 'none'; registerPopup.style.display = 'none'; profilePopup.style.display = 'none'; }));
+
+  loginForm.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const email = document.getElementById('login-email').value;
+    const password = document.getElementById('login-password').value;
+    auth.signInWithEmailAndPassword(email, password).then(userCredential => {
+      currentUser = { ...userCredential.user, uid: userCredential.user.uid };
+      console.log('User logged in via login form:', currentUser);
+      authPopup.style.display = 'none';
+    }).catch(error => alert(error.message));
+  });
+
+  registerForm.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const username = document.getElementById('register-username').value;
+    const email = document.getElementById('register-email').value;
+    const password = document.getElementById('register-password').value;
+    const thought = document.getElementById('register-thought').value || '';
+    const tags = document.getElementById('register-tags').value || '';
+    const bio = document.getElementById('register-bio').value || '';
+    auth.createUserWithEmailAndPassword(email, password).then(userCredential => {
+      currentUser = { ...userCredential.user, uid: userCredential.user.uid };
+      console.log('User registered:', currentUser);
+      return database.ref('users/' + currentUser.uid).set({
+        username, email, thought, tags, bio,
+        avatar: `https://placehold.co/40/8a4af3/ffffff?text=${username.charAt(0).toUpperCase()}`,
+        likes: 0, comments: 0, match: Math.floor(Math.random() * 100)
       });
-  } catch (error) {
-    console.error('Error verifying token:', error);
-    localStorage.removeItem('token');
-    token = null;
+    }).then(() => {
+      registerPopup.style.display = 'none';
+      fetchUserProfile(currentUser.uid);
+    }).catch(error => alert(error.message));
+  });
+
+  document.getElementById('edit-profile')?.addEventListener('click', () => { if (currentUser) showProfile(currentUser.uid); });
+
+  chatForm.addEventListener('submit', (e) => {
+    e.preventDefault();
+    if (currentChatUser && chatInput.value.trim()) {
+      sendMessage(chatInput.value);
+      chatInput.value = '';
+    }
+  });
+
+  emojiBtn.addEventListener('click', () => {
+    emojiPickerContainer.style.display = emojiPickerContainer.style.display === 'none' ? 'block' : 'none';
+  });
+  document.querySelector('emoji-picker').addEventListener('emoji-click', event => {
+    chatInput.value += event.detail.unicode;
+    emojiPickerContainer.style.display = 'none';
+  });
+
+  fileInput.addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (file && currentChatUser) {
+      const reader = new FileReader();
+      reader.onload = (event) => sendMessage(`<img src="${event.target.result}" alt="Image" style="max-width: 200px;">`);
+      reader.readAsDataURL(file);
+      fileInput.value = '';
+    }
+  });
+
+  postBtn.addEventListener('click', (e) => {
+    e.preventDefault();
+    postBtn.classList.add('active');
+    thoughtBtn.classList.remove('active');
+    if (postInput.value.trim() && currentUser) submitPost('post');
+  });
+
+  thoughtBtn.addEventListener('click', (e) => {
+    e.preventDefault();
+    thoughtBtn.classList.add('active');
+    postBtn.classList.remove('active');
+    if (postInput.value.trim() && currentUser) submitPost('thought');
+  });
+
+  searchBtn.addEventListener('click', () => {
+    const query = usernameSearch.value.toLowerCase();
+    console.log('Search query:', query);
+    if (query) {
+      const filteredProfiles = profiles.filter(profile => profile.username.toLowerCase().includes(query));
+      console.log('Filtered profiles:', filteredProfiles);
+      displayFilteredCards(filteredProfiles);
+    }
+  });
+
+  matchFilter.addEventListener('change', filterProfiles);
+  matchSort.addEventListener('change', sortProfiles);
+
+  backBtn.addEventListener('click', () => {
+    switchSection('match-feed');
+    currentChatUser = null;
+    chatList.innerHTML = '<p>Select a match or friend to chat!</p>';
+  });
+
+  clearChatBtn.addEventListener('click', () => {
+    if (currentChatUser) {
+      const chatId = generateChatId(currentUser.uid, currentChatUser.id);
+      database.ref('messages/' + chatId).remove();
+      chatList.innerHTML = '<p>Chat cleared!</p>';
+    }
+  });
+
+  chatInput.addEventListener('input', () => {
+    if (currentChatUser && chatInput.value.trim()) {
+      typingIndicator.textContent = 'Typing...';
+      setTimeout(() => { typingIndicator.textContent = ''; }, 2000);
+    }
+  });
+
+  // Event delegation for dynamic buttons
+  matchCards.addEventListener('click', (e) => {
+    const yesBtn = e.target.closest('.yes-btn');
+    const noBtn = e.target.closest('.no-btn');
+    const friendRequestBtn = e.target.closest('.friend-request-btn');
+    if (yesBtn) {
+      const card = yesBtn.closest('.card');
+      const profile = profiles.find(p => p.username === card.querySelector('h3').textContent);
+      if (profile) addToMatches(profile);
+    } else if (noBtn) {
+      const card = noBtn.closest('.card');
+      const profile = profiles.find(p => p.username === card.querySelector('h3').textContent);
+      profiles = profiles.filter(p => p.id !== profile.id);
+      displayFilteredCards(profiles);
+    } else if (friendRequestBtn) {
+      const card = friendRequestBtn.closest('.card');
+      const profile = profiles.find(p => p.username === card.querySelector('h3').textContent);
+      if (profile) sendFriendRequest(profile.id);
+    }
+  });
+
+  matchesSection.addEventListener('click', (e) => {
+    const friendRequestBtn = e.target.closest('.friend-request-btn');
+    const chatBtn = e.target.closest('.chat-btn');
+    if (friendRequestBtn) {
+      const match = matches.find(m => m.username === e.target.closest('.match').querySelector('h3').textContent);
+      if (match) sendFriendRequest(match.id);
+    } else if (chatBtn) {
+      const match = matches.find(m => m.username === e.target.closest('.match').querySelector('h3').textContent);
+      if (match) startChat(match);
+    }
+  });
+
+  friendsSection.addEventListener('click', (e) => {
+    const chatBtn = e.target.closest('.chat-btn');
+    const removeBtn = e.target.closest('.remove-friend-btn');
+    const acceptBtn = e.target.closest('.accept-btn');
+    const rejectBtn = e.target.closest('.reject-btn');
+    if (chatBtn) {
+      const friend = friends.find(f => f.username === e.target.closest('.friend').querySelector('h3').textContent);
+      if (friend) startChat(friend);
+    } else if (removeBtn) {
+      const friend = friends.find(f => f.username === e.target.closest('.friend').querySelector('h3').textContent);
+      if (friend) removeFriend(friend.id);
+    } else if (acceptBtn) {
+      const requestId = acceptBtn.getAttribute('data-request-id');
+      acceptFriendRequest(requestId);
+    } else if (rejectBtn) {
+      const requestId = rejectBtn.getAttribute('data-request-id');
+      rejectFriendRequest(requestId);
+    }
+  });
+});
+
+function handleAuthAction() {
+  const action = authBtn.getAttribute('data-action');
+  if (action === 'login') authPopup.style.display = 'flex';
+  else if (action === 'logout') {
+    auth.signOut().then(() => {
+      currentUser = null;
+      authText.textContent = 'Login';
+      authBtn.setAttribute('data-action', 'login');
+      matchCards.innerHTML = '';
+      commonFeedContent.innerHTML = '';
+      weirdFeedContent.innerHTML = '';
+      matchesSection.innerHTML = '<h2>Your Matches</h2>';
+      friendsSection.innerHTML = '<h2>Your Friends</h2>';
+      chatList.innerHTML = '<p>Select a match or friend to chat!</p>';
+    }).catch(error => alert(error.message));
   }
 }
 
-// Fetch initial data from backend
-async function fetchInitialData() {
-  try {
-    const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
-    const [usersRes, postsRes] = await Promise.all([
-      fetch('http://localhost:5001/api/users', { headers }),
-      fetch('http://localhost:5001/api/posts', { headers })
-    ]);
-    profiles = await usersRes.json();
-    posts = await postsRes.json();
-    thoughts = posts.filter(p => p.type === 'thought');
-    renderCards();
+function switchSection(sectionId) {
+  document.querySelectorAll('section').forEach(section => section.classList.remove('active'));
+  document.getElementById(sectionId).classList.add('active');
+  currentSection = sectionId;
+}
+
+function fetchUserProfile(uid) {
+  database.ref('users/' + uid).once('value', snapshot => {
+    const userData = snapshot.val();
+    if (userData) {
+      currentUser = { ...currentUser, ...userData, id: uid, uid: currentUser.uid };
+      console.log('Updated currentUser after fetch:', currentUser);
+      userAvatar.src = userData.avatar;
+      userAvatar.onerror = () => {
+        console.warn('Failed to load avatar, using fallback image');
+        userAvatar.src = 'https://placehold.co/40/8a4af3/ffffff?text=U';
+      };
+      profileUsername.textContent = userData.username;
+      profileThought.textContent = userData.thought;
+      profileTags.textContent = userData.tags;
+      profileMatch.textContent = userData.match;
+      profileLikes.textContent = userData.likes;
+      profileComments.textContent = userData.comments;
+      profileBio.textContent = userData.bio;
+    } else {
+      console.warn('No user data found for UID:', uid);
+    }
+  }, error => console.error('Error fetching user profile:', error));
+}
+
+function fetchProfiles() {
+  database.ref('users').once('value', snapshot => {
+    profiles = [];
+    if (!snapshot.exists()) {
+      console.log('No profiles found in the database.');
+      displayInitialSearchUI();
+      return;
+    }
+    snapshot.forEach(childSnapshot => {
+      const user = childSnapshot.val();
+      user.id = childSnapshot.key;
+      if (user.id !== currentUser?.id && !matches.some(m => m.id === user.id) && !friends.some(f => f.id === user.id)) {
+        profiles.push(user);
+      }
+    });
+    console.log('Fetched profiles:', profiles);
+    displayInitialSearchUI();
+  }, error => {
+    console.error('Error fetching profiles:', error);
+    alert('Failed to fetch profiles. Please check your connection and try again.');
+    displayInitialSearchUI();
+  });
+}
+
+function fetchPosts() {
+  database.ref('posts').on('value', snapshot => {
+    posts = [];
+    snapshot.forEach(childSnapshot => {
+      const post = childSnapshot.val();
+      post.id = childSnapshot.key;
+      posts.push(post);
+    });
+    console.log('Fetched posts:', posts);
+    renderPosts();
+    renderWeirdFeed();
+  }, error => console.error('Error fetching posts:', error));
+}
+
+function fetchMatches() {
+  if (!currentUser || !currentUser.uid) {
+    console.warn('Cannot fetch matches: currentUser or uid is missing:', currentUser);
+    return;
+  }
+  database.ref('matches/' + currentUser.uid).once('value', snapshot => {
+    matches = [];
+    snapshot.forEach(childSnapshot => {
+      const match = childSnapshot.val();
+      match.id = childSnapshot.key;
+      matches.push(match);
+    });
+    console.log('Fetched matches:', matches);
     renderMatches();
-    renderFriends();
-    renderFeeds();
-  } catch (error) {
-    console.error('Error fetching initial data:', error);
-  }
+  }, error => console.error('Error fetching matches:', error));
 }
 
-// Render functions
-function renderCards(searchQuery = '', filter = 'all', sort = 'none') {
-  const matchFeed = document.querySelector('.match-feed');
-  matchFeed.innerHTML = `
+function fetchFriends() {
+  if (!currentUser || !currentUser.uid) {
+    console.warn('Cannot fetch friends: currentUser or uid is missing:', currentUser);
+    return;
+  }
+  database.ref('friends/' + currentUser.uid).on('value', snapshot => {
+    friends = [];
+    if (!snapshot.exists()) {
+      console.log('No friends found.');
+      renderFriends();
+      return;
+    }
+    const friendPromises = [];
+    snapshot.forEach(childSnapshot => {
+      const friend = childSnapshot.val();
+      friend.id = childSnapshot.key;
+      friendPromises.push(
+        database.ref('users/' + friend.id).once('value').then(friendSnapshot => {
+          const friendData = friendSnapshot.val();
+          if (friendData) {
+            return { ...friendData, id: friend.id };
+          }
+          return null;
+        })
+      );
+    });
+    Promise.all(friendPromises).then(friendResults => {
+      friends = friendResults.filter(friend => friend !== null);
+      console.log('Fetched friends:', friends);
+      renderFriends();
+    }).catch(error => console.error('Error fetching friends details:', error));
+  }, error => console.error('Error fetching friends:', error));
+}
+
+function fetchFriendRequests() {
+  if (!currentUser || !currentUser.uid) {
+    console.warn('Cannot fetch friend requests: currentUser or uid is missing:', currentUser);
+    return;
+  }
+  database.ref('friend_requests/' + currentUser.uid).on('value', async snapshot => {
+    friendRequests = [];
+    if (!snapshot.exists()) {
+      console.log('No friend requests found.');
+      renderFriendRequests();
+      return;
+    }
+    const requestPromises = [];
+    snapshot.forEach(childSnapshot => {
+      const request = childSnapshot.val();
+      request.id = childSnapshot.key;
+      requestPromises.push(
+        database.ref('users/' + request.id).once('value').then(requestSnapshot => {
+          const requesterData = requestSnapshot.val();
+          if (requesterData) {
+            return { ...requesterData, id: request.id, status: request.status || 'pending' };
+          }
+          return null;
+        })
+      );
+    });
+    try {
+      const requestResults = await Promise.all(requestPromises);
+      friendRequests = requestResults.filter(request => request !== null);
+      console.log('Fetched friend requests:', friendRequests);
+      renderFriendRequests();
+    } catch (error) {
+      console.error('Error fetching friend requests details:', error);
+    }
+  }, error => console.error('Error fetching friend requests:', error));
+}
+
+function displayInitialSearchUI() {
+  matchCards.innerHTML = `
     <h2>Find Your Weird</h2>
     <div class="search-bar">
       <input type="text" id="username-search" placeholder="Search by username..." />
@@ -77,860 +461,383 @@ function renderCards(searchQuery = '', filter = 'all', sort = 'none') {
       </select>
     </div>
   `;
-
-  let filteredProfiles = [...profiles];
-  if (searchQuery) {
-    filteredProfiles = filteredProfiles.filter(profile => profile.username.toLowerCase().includes(searchQuery.toLowerCase()));
-  }
-
-  if (filter === 'tags') {
-    filteredProfiles = filteredProfiles.filter(profile => profile.tags);
-  } else if (filter === 'likes') {
-    filteredProfiles = filteredProfiles.filter(profile => profile.likes > 0);
-  } else if (filter === 'match') {
-    filteredProfiles = filteredProfiles.filter(profile => profile.match >= 80);
-  }
-
-  if (sort === 'match-desc') {
-    filteredProfiles.sort((a, b) => b.match - a.match);
-  } else if (sort === 'match-asc') {
-    filteredProfiles.sort((a, b) => a.match - b.match);
-  } else if (sort === 'username') {
-    filteredProfiles.sort((a, b) => a.username.localeCompare(b.username));
-  }
-
-  if (filteredProfiles.length === 0) {
-    matchFeed.innerHTML += '<p>No results found.</p>';
-    return;
-  }
-
-  filteredProfiles.forEach((profile, index) => {
-    const card = document.createElement('div');
-    card.className = 'card';
-    card.setAttribute('data-index', index);
-    card.innerHTML = `
-      <p><strong>Username:</strong> ${profile.username}</p>
-      <p><strong>Thought:</strong> ${profile.thought}</p>
-      <p><strong>Tags:</strong> ${profile.tags}</p>
-      <p><strong>Match:</strong> ${profile.match}%</p>
-      <p>Likes: <span class="like-count">${profile.likes}</span> | Comments: <span class="comment-count">${profile.comments}</span></p>
-      <button class="like-btn">Like</button>
-      <button class="view-profile-btn">View Profile</button>
-      <div class="buttons">
-        <button class="no-btn">No</button>
-        <button class="yes-btn">Yes</button>
-      </div>
-    `;
-    matchFeed.appendChild(card);
-  });
-
-  document.querySelectorAll('.yes-btn').forEach(btn => {
-    btn.addEventListener('click', async function() {
-      if (!currentUser) {
-        alert('Please log in to add matches!');
-        return;
-      }
-      const card = this.closest('.card');
-      const index = card.getAttribute('data-index');
-      const match = filteredProfiles[index];
-      const response = await fetch('http://localhost:5001/api/matches', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify({ userId: currentUser.id, matchId: match.id })
-      });
-      if (response.ok) {
-        matches.push(match);
-        card.style.opacity = '0';
-        setTimeout(() => card.remove(), 300);
-        alert('Match! Added to your matches.');
-        renderMatches();
-        renderFeeds();
-      }
-    });
-  });
-  document.querySelectorAll('.no-btn').forEach(btn => {
-    btn.addEventListener('click', function() {
-      const card = this.closest('.card');
-      card.style.opacity = '0';
-      setTimeout(() => card.remove(), 300);
-      alert('Nope!');
-    });
-  });
-  document.querySelectorAll('.like-btn').forEach(btn => {
-    btn.addEventListener('click', async function() {
-      if (!currentUser) {
-        alert('Please log in to like profiles!');
-        return;
-      }
-      const card = this.closest('.card');
-      const index = card.getAttribute('data-index');
-      filteredProfiles[index].likes++;
-      card.querySelector('.like-count').textContent = filteredProfiles[index].likes;
-      await fetch(`http://localhost:5001/api/users/${filteredProfiles[index].id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify({ likes: filteredProfiles[index].likes })
-      });
-      renderFeeds();
-    });
-  });
-  document.querySelectorAll('.view-profile-btn').forEach(btn => {
-    btn.addEventListener('click', function() {
-      const card = this.closest('.card');
-      const index = card.getAttribute('data-index');
-      showProfile(filteredProfiles[index]);
-    });
-  });
-
-  document.getElementById('match-filter').value = filter;
-  document.getElementById('match-sort').value = sort;
-  document.getElementById('match-filter').addEventListener('change', (e) => {
-    renderCards(searchQuery, e.target.value, document.getElementById('match-sort').value);
-  });
-  document.getElementById('match-sort').addEventListener('change', (e) => {
-    renderCards(searchQuery, document.getElementById('match-filter').value, e.target.value);
-  });
-
   document.getElementById('search-btn').addEventListener('click', () => {
-    const searchQuery = document.getElementById('username-search').value;
-    renderCards(searchQuery, filter, sort);
-  });
-  document.getElementById('username-search').addEventListener('keypress', (e) => {
-    if (e.key === 'Enter') {
-      const searchQuery = document.getElementById('username-search').value;
-      renderCards(searchQuery, filter, sort);
+    const query = document.getElementById('username-search').value.toLowerCase();
+    console.log('Search query:', query);
+    if (query) {
+      const filteredProfiles = profiles.filter(profile => profile.username.toLowerCase().includes(query));
+      console.log('Filtered profiles:', filteredProfiles);
+      displayFilteredCards(filteredProfiles);
     }
   });
+  document.getElementById('match-filter').addEventListener('change', filterProfiles);
+  document.getElementById('match-sort').addEventListener('change', sortProfiles);
 }
 
-function renderMatches() {
-  const matchesSection = document.querySelector('.matches');
-  matchesSection.innerHTML = '<h2>Your Matches</h2>';
-
-  if (matches.length === 0) {
-    matchesSection.innerHTML += '<p>No matches yet!</p>';
+function displayFilteredCards(filteredProfiles) {
+  matchCards.innerHTML = `
+    <h2>Find Your Weird</h2>
+    <div class="search-bar">
+      <input type="text" id="username-search" placeholder="Search by username..." />
+      <button id="search-btn"><i class="fas fa-search"></i></button>
+    </div>
+    <div class="filters">
+      <select id="match-filter">
+        <option value="all">All</option>
+        <option value="tags">By Tags</option>
+        <option value="likes">By Likes</option>
+        <option value="match">By Match %</option>
+      </select>
+      <select id="match-sort">
+        <option value="none">Sort By</option>
+        <option value="match-desc">Match % (High to Low)</option>
+        <option value="match-asc">Match % (Low to High)</option>
+        <option value="username">Username (A-Z)</option>
+      </select>
+    </div>
+  `;
+  if (filteredProfiles.length === 0) {
+    matchCards.innerHTML += '<p>No matching profiles found.</p>';
   } else {
-    matches.forEach((match, index) => {
-      const matchDiv = document.createElement('div');
-      matchDiv.className = 'match';
-      matchDiv.setAttribute('data-index', index);
-      matchDiv.innerHTML = `
-        <p><strong>Username:</strong> ${match.username}</p>
-        <p><strong>Thought:</strong> ${match.thought}</p>
-        <p><strong>Tags:</strong> ${match.tags}</p>
-        <p><strong>Match:</strong> ${match.match}%</p>
-        <p>Likes: <span class="like-count">${match.likes}</span> | Comments: <span class="comment-count">${match.comments}</span></p>
-        <button class="like-btn">Like</button>
-        <button class="view-profile-btn">View Profile</button>
-        <button class="remove-btn">Remove</button>
-        <button class="reply-btn">Reply</button>
-        <button class="friend-btn">Add Friend</button>
+    filteredProfiles.forEach(profile => {
+      const card = document.createElement('div');
+      card.className = 'card';
+      card.innerHTML = `
+        <h3>${profile.username}</h3>
+        <p><strong>Thought:</strong> ${profile.thought}</p>
+        <p><strong>Tags:</strong> ${profile.tags}</p>
+        <p><strong>Match:</strong> ${profile.match}%</p>
+        <div class="buttons">
+          <button class="yes-btn">Yes</button>
+          <button class="no-btn">No</button>
+          <button class="friend-request-btn">Send Friend Request</button>
+        </div>
       `;
-      matchDiv.addEventListener('click', () => showProfile(match));
-      matchesSection.appendChild(matchDiv);
-    });
-
-    document.querySelectorAll('.remove-btn').forEach(btn => {
-      btn.addEventListener('click', async function(e) {
-        e.stopPropagation();
-        if (!currentUser) {
-          alert('Please log in to remove matches!');
-          return;
-        }
-        const matchDiv = this.closest('.match');
-        const index = matchDiv.getAttribute('data-index');
-        await fetch(`http://localhost:5001/api/matches/${matches[index].id}`, {
-          method: 'DELETE',
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
-        matches.splice(index, 1);
-        renderMatches();
-        renderFeeds();
-      });
-    });
-    document.querySelectorAll('.reply-btn').forEach(btn => {
-      btn.addEventListener('click', function(e) {
-        e.stopPropagation();
-        const matchDiv = this.closest('.match');
-        const index = matchDiv.getAttribute('data-index');
-        showChat(matches[index]);
-      });
-    });
-    document.querySelectorAll('.like-btn').forEach(btn => {
-      btn.addEventListener('click', async function(e) {
-        e.stopPropagation();
-        if (!currentUser) {
-          alert('Please log in to like matches!');
-          return;
-        }
-        const matchDiv = this.closest('.match');
-        const index = matchDiv.getAttribute('data-index');
-        matches[index].likes++;
-        matchDiv.querySelector('.like-count').textContent = matches[index].likes;
-        await fetch(`http://localhost:5001/api/users/${matches[index].id}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-          body: JSON.stringify({ likes: matches[index].likes })
-        });
-        renderFeeds();
-      });
-    });
-    document.querySelectorAll('.friend-btn').forEach(btn => {
-      btn.addEventListener('click', async function(e) {
-        e.stopPropagation();
-        if (!currentUser) {
-          alert('Please log in to add friends!');
-          return;
-        }
-        const matchDiv = this.closest('.match');
-        const index = matchDiv.getAttribute('data-index');
-        const friend = matches[index];
-        await fetch('http://localhost:5001/api/friends', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-          body: JSON.stringify({ userId: currentUser.id, friendId: friend.id })
-        });
-        friends.push(friend);
-        matches.splice(index, 1);
-        renderMatches();
-        renderFriends();
-        renderFeeds();
-      });
-    });
-    document.querySelectorAll('.view-profile-btn').forEach(btn => {
-      btn.addEventListener('click', function(e) {
-        e.stopPropagation();
-        const matchDiv = this.closest('.match');
-        const index = matchDiv.getAttribute('data-index');
-        showProfile(matches[index]);
-      });
+      matchCards.appendChild(card);
     });
   }
-}
-
-function renderFriends() {
-  const friendsSection = document.querySelector('.friends');
-  friendsSection.innerHTML = '<h2>Your Friends</h2>';
-
-  if (friends.length === 0) {
-    friendsSection.innerHTML += '<p>No friends yet!</p>';
-  } else {
-    friends.forEach((friend, index) => {
-      const friendDiv = document.createElement('div');
-      friendDiv.className = 'friend';
-      friendDiv.setAttribute('data-index', index);
-      friendDiv.innerHTML = `
-        <p><strong>Username:</strong> ${friend.username}</p>
-        <p><strong>Thought:</strong> ${friend.thought}</p>
-        <p><strong>Tags:</strong> ${friend.tags}</p>
-        <button class="view-profile-btn">View Profile</button>
-        <button class="reply-btn">Chat</button>
-      `;
-      friendDiv.addEventListener('click', () => showProfile(friend));
-      friendsSection.appendChild(friendDiv);
-    });
-
-    document.querySelectorAll('.friend .reply-btn').forEach(btn => {
-      btn.addEventListener('click', function(e) {
-        e.stopPropagation();
-        const friendDiv = this.closest('.friend');
-        const index = friendDiv.getAttribute('data-index');
-        showChat(friends[index]);
-      });
-    });
-    document.querySelectorAll('.view-profile-btn').forEach(btn => {
-      btn.addEventListener('click', function(e) {
-        e.stopPropagation();
-        const friendDiv = this.closest('.friend');
-        const index = friendDiv.getAttribute('data-index');
-        showProfile(friends[index]);
-      });
-    });
-  }
-}
-
-function renderCommonFeed() {
-  const commonFeed = document.getElementById('common-feed-content');
-  const toggleType = document.querySelector('.toggle-btn.active')?.getAttribute('data-type') || 'posts';
-  commonFeed.innerHTML = '';
-
-  let feedItems = toggleType === 'posts' ? [...posts] : [...thoughts];
-
-  feedItems.forEach((item, index) => {
-    renderPost(item, index, commonFeed);
+  document.getElementById('search-btn').addEventListener('click', () => {
+    const query = document.getElementById('username-search').value.toLowerCase();
+    console.log('Search query:', query);
+    if (query) {
+      const filteredProfiles = profiles.filter(profile => profile.username.toLowerCase().includes(query));
+      console.log('Filtered profiles:', filteredProfiles);
+      displayFilteredCards(filteredProfiles);
+    }
   });
+  document.getElementById('match-filter').addEventListener('change', filterProfiles);
+  document.getElementById('match-sort').addEventListener('change', sortProfiles);
+}
+
+function filterProfiles() {
+  let filteredProfiles = [...profiles];
+  const filter = matchFilter.value;
+  if (filter === 'tags' && currentUser?.tags) {
+    filteredProfiles = filteredProfiles.filter(profile => profile.tags && profile.tags.toLowerCase().includes(currentUser.tags.toLowerCase()));
+  } else if (filter === 'likes') {
+    filteredProfiles.sort((a, b) => (b.likes || 0) - (a.likes || 0));
+  } else if (filter === 'match') {
+    filteredProfiles.sort((a, b) => b.match - a.match);
+  }
+  sortProfiles(filteredProfiles);
+}
+
+function sortProfiles(filteredProfiles = profiles) {
+  const sort = matchSort.value;
+  if (sort === 'match-desc') filteredProfiles.sort((a, b) => b.match - a.match);
+  else if (sort === 'match-asc') filteredProfiles.sort((a, b) => a.match - b.match);
+  else if (sort === 'username') filteredProfiles.sort((a, b) => a.username.localeCompare(b.username));
+  displayFilteredCards(filteredProfiles);
+}
+
+function addToMatches(profile) {
+  if (!currentUser || !currentUser.uid || !profile || !profile.id) {
+    console.error('Cannot add to matches: No current user or profile ID:', { currentUser, profile });
+    alert('Please log in to add matches.');
+    return;
+  }
+  console.log('Adding to matches:', currentUser.uid, 'with profile:', profile.id);
+  database.ref('matches/' + currentUser.uid + '/' + profile.id).set({
+    username: profile.username,
+    match: profile.match
+  }).then(() => {
+    matches.push(profile);
+    renderMatches();
+    console.log('Added to matches:', profile);
+  }).catch(error => {
+    console.error('Error adding to matches:', error);
+    alert('Failed to add to matches. Check console for details.');
+  });
+}
+
+function renderPosts() {
+  commonFeedContent.innerHTML = '';
+  posts.filter(post => post.type === 'post').forEach(post => {
+    const postElement = document.createElement('div');
+    postElement.className = 'post';
+    postElement.innerHTML = `
+      <h3>${post.username || 'Anonymous'}</h3>
+      <p>${post.content}</p>
+      <p><strong>Type:</strong> ${post.type}</p>
+      <p><strong>Tags:</strong> ${post.tags}</p>
+      <p><strong>Posted at:</strong> ${post.timestamp}</p>
+      <div class="buttons">
+        <button class="like-btn">Like (${post.likes || 0})</button>
+        <button class="comment-btn">Comment</button>
+      </div>
+    `;
+    commonFeedContent.appendChild(postElement);
+  });
+  if (!commonFeedContent.innerHTML) commonFeedContent.innerHTML = '<p>No posts in Common Feed.</p>';
 }
 
 function renderWeirdFeed() {
-  const weirdFeed = document.getElementById('feed');
-  weirdFeed.innerHTML = '';
-
-  let feedItems = [...posts, ...thoughts];
-
-  feedItems.forEach((item, index) => {
-    renderPost(item, index, weirdFeed);
+  weirdFeedContent.innerHTML = '';
+  posts.filter(post => post.type === 'thought').forEach(post => {
+    const postElement = document.createElement('div');
+    postElement.className = 'post';
+    postElement.innerHTML = `
+      <h3>${post.username || 'Anonymous'}</h3>
+      <p>${post.content}</p>
+      <p><strong>Type:</strong> ${post.type}</p>
+      <p><strong>Tags:</strong> ${post.tags}</p>
+      <p><strong>Posted at:</strong> ${post.timestamp}</p>
+      <div class="buttons">
+        <button class="like-btn">Like (${post.likes || 0})</button>
+        <button class="comment-btn">Comment</button>
+      </div>
+    `;
+    weirdFeedContent.appendChild(postElement);
   });
+  if (!weirdFeedContent.innerHTML) weirdFeedContent.innerHTML = '<p>No thoughts in Weird Feed.</p>';
 }
 
-function renderPost(post, index, container) {
-  const postDiv = document.createElement('div');
-  postDiv.className = 'post';
-  postDiv.setAttribute('data-index', index);
-  postDiv.innerHTML = `
-    <p><strong>${post.userId ? profiles.find(p => p.id === post.userId)?.username || 'Anonymous' : 'Anonymous'} - ${post.timestamp}</strong></p>
-    <p>${post.content}</p>
-    <p><strong>Tags:</strong> ${post.tags || 'None'}</p>
-    <p>Likes: <span class="like-count">${post.likes}</span> | Comments: <span class="comment-count">${post.comments.length}</span></p>
-    <button class="like-btn">Like</button>
-    <button class="view-profile-btn">View Profile</button>
-    <button class="friend-btn">Add Friend</button>
-    <div class="comment-section"></div>
-    <form class="comment-form">
-      <input type="text" placeholder="Add a comment..." maxlength="100">
-      <button type="submit">Post</button>
-    </form>
-  `;
-  container.appendChild(postDiv);
-
-  const commentSection = postDiv.querySelector('.comment-section');
-  post.comments.forEach((comment, commentIndex) => {
-    renderComment(comment, index, [commentIndex], commentSection);
+function renderMatches() {
+  matchesSection.innerHTML = '<h2>Your Matches</h2>';
+  matches.forEach(match => {
+    const matchElement = document.createElement('div');
+    matchElement.className = 'match';
+    matchElement.innerHTML = `
+      <h3>${match.username}</h3>
+      <p><strong>Match:</strong> ${match.match}%</p>
+      <div class="buttons">
+        <button class="friend-request-btn">Send Friend Request</button>
+        <button class="chat-btn">Chat</button>
+      </div>
+    `;
+    matchesSection.appendChild(matchElement);
   });
-
-  postDiv.querySelector('.like-btn').addEventListener('click', async () => {
-    if (!currentUser) {
-      alert('Please log in to like posts!');
-      return;
-    }
-    post.likes++;
-    postDiv.querySelector('.like-count').textContent = post.likes;
-    await fetch(`http://localhost:5001/api/posts/${post.id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-      body: JSON.stringify({ likes: post.likes })
-    });
-  });
-
-  postDiv.querySelector('.view-profile-btn').addEventListener('click', () => {
-    const profile = profiles.find(p => p.id === post.userId) || { username: 'Anonymous', thought: '', tags: '', match: 0, likes: 0, comments: 0, bio: 'No bio available.', avatar: 'https://via.placeholder.com/80/cccccc/ffffff?text=Anon' };
-    showProfile(profile);
-  });
-
-  postDiv.querySelector('.friend-btn').addEventListener('click', async () => {
-    if (!currentUser) {
-      alert('Please log in to add friends!');
-      return;
-    }
-    if (post.userId === currentUser.id) {
-      alert(`Cannot add yourself as a friend!`);
-      return;
-    }
-    const profile = profiles.find(p => p.id === post.userId);
-    if (profile && !friends.some(f => f.id === profile.id)) {
-      await fetch('http://localhost:5001/api/friends', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify({ userId: currentUser.id, friendId: profile.id })
-      });
-      friends.push(profile);
-      renderFriends();
-      alert(`${profile.username} added as a friend!`);
-    } else {
-      alert(`${profile?.username || 'Anonymous'} is already your friend or anonymous!`);
-    }
-  });
-
-  postDiv.querySelector('.comment-form').addEventListener('submit', async function(e) {
-    e.preventDefault();
-    if (!currentUser) {
-      alert('Please log in to comment!');
-      return;
-    }
-    const input = postDiv.querySelector('.comment-form input');
-    if (input.value.trim()) {
-      const timestamp = new Date().toLocaleTimeString();
-      const newComment = { id: post.comments.length + 1, userId: currentUser.id, content: input.value, timestamp, replies: [] };
-      post.comments.push(newComment);
-      await fetch(`http://localhost:5001/api/posts/${post.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify({ comments: post.comments })
-      });
-      renderFeeds();
-      input.value = '';
-    }
-  });
+  if (!matchesSection.innerHTML.includes('match')) matchesSection.innerHTML += '<p>No matches yet.</p>';
 }
 
-function renderComment(comment, postIndex, commentPath, container) {
-  const commentDiv = document.createElement('div');
-  commentDiv.className = 'comment';
-  commentDiv.style.marginLeft = '0';
-  const username = profiles.find(p => p.id === comment.userId)?.username || 'Anonymous';
-  commentDiv.innerHTML = `
-    <p><strong>${username}</strong> ${comment.content} <span>${comment.timestamp}</span></p>
-    <button class="reply-btn">Reply</button>
-  `;
-  container.appendChild(commentDiv);
-
-  const repliesContainer = document.createElement('div');
-  commentDiv.appendChild(repliesContainer);
-
-  comment.replies.forEach((reply, replyIndex) => {
-    renderComment(reply, postIndex, [...commentPath, replyIndex], repliesContainer);
+function renderFriends() {
+  friendsSection.innerHTML = '<h2>Your Friends</h2>';
+  friends.forEach(friend => {
+    const friendElement = document.createElement('div');
+    friendElement.className = 'friend';
+    friendElement.innerHTML = `
+      <h3>${friend.username}</h3>
+      <div class="buttons">
+        <button class="chat-btn">Chat</button>
+        <button class="remove-friend-btn">Remove</button>
+      </div>
+    `;
+    friendsSection.appendChild(friendElement);
   });
-
-  const replyForm = document.createElement('form');
-  replyForm.className = 'reply-form';
-  replyForm.style.display = 'none';
-  replyForm.innerHTML = `
-    <input type="text" placeholder="Reply..." maxlength="100">
-    <button type="submit">Post</button>
-  `;
-  commentDiv.appendChild(replyForm);
-
-  commentDiv.querySelector('.reply-btn').addEventListener('click', () => {
-    replyForm.style.display = replyForm.style.display === 'none' ? 'flex' : 'none';
-  });
-
-  replyForm.addEventListener('submit', async function(e) {
-    e.preventDefault();
-    if (!currentUser) {
-      alert('Please log in to reply!');
-      return;
-    }
-    const input = replyForm.querySelector('input');
-    if (input.value.trim()) {
-      const timestamp = new Date().toLocaleTimeString();
-      const newReply = { id: comment.replies.length + 1, userId: currentUser.id, content: input.value, timestamp, replies: [] };
-      let currentLevel = posts[postIndex].comments;
-      commentPath.forEach(idx => {
-        currentLevel = currentLevel[idx].replies;
-      });
-      currentLevel.push(newReply);
-      await fetch(`http://localhost:5001/api/posts/${posts[postIndex].id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify({ comments: posts[postIndex].comments })
-      });
-      renderFeeds();
-      input.value = '';
-      replyForm.style.display = 'none';
-    }
-  });
+  renderFriendRequests(); // Ensure friend requests are rendered after friends
 }
 
-function renderFeeds() {
-  renderWeirdFeed();
-  renderCommonFeed();
-}
-
-function showProfile(profile) {
-  console.log('showProfile called with profile:', profile); // Debug log to trace calls
-  if (!profile) {
-    console.error('No profile provided to showProfile');
-    return;
-  }
-  document.getElementById('profile-username').textContent = profile.username || 'Unknown';
-  document.getElementById('profile-thought').textContent = profile.thought || '';
-  document.getElementById('profile-tags').textContent = profile.tags || 'None';
-  document.getElementById('profile-match').textContent = profile.match || 0;
-  document.getElementById('profile-likes').textContent = profile.likes || 0;
-  document.getElementById('profile-comments').textContent = profile.comments || 0;
-  document.getElementById('profile-bio').textContent = profile.bio || 'No bio available.';
-  document.getElementById('profile-avatar').src = profile.avatar || 'https://via.placeholder.com/80/cccccc/ffffff?text=User';
-  document.querySelector('.profile-popup').style.display = 'flex';
-
-  document.getElementById('edit-profile').addEventListener('click', () => {
-    alert('Edit profile feature coming soon!');
-  });
-}
-
-async function showChat(contact) {
-  if (!currentUser) {
-    alert('Please log in to chat!');
-    return;
-  }
-  switchSection('chat-section');
-  const chatList = document.getElementById('chat-list');
-  const chatForm = document.getElementById('chat-form');
-  const typingIndicator = document.getElementById('typing-indicator');
-  const clearChatBtn = document.getElementById('clear-chat');
-  const emojiBtn = document.getElementById('emoji-btn');
-  const emojiPickerContainer = document.querySelector('.emoji-picker-container');
-  const emojiPicker = document.querySelector('emoji-picker');
-  const chatInput = document.getElementById('chat-input');
-  const fileInput = document.getElementById('file-input');
-  const backBtn = document.querySelector('.back-btn');
-  const contactKey = `${currentUser.id}-${contact.id}`;
-
-  const response = await fetch(`http://localhost:5001/api/messages/${currentUser.id}/${contact.id}`, {
-    headers: { 'Authorization': `Bearer ${token}` }
-  });
-  chatHistories[contactKey] = await response.json() || [];
-
-  document.querySelector('.chat-header h2').textContent = `Chat with ${contact.username}`;
-
-  chatForm.style.display = 'block';
-  replyingToMessage = null;
-
-  function renderChatMessages() {
-    const newMessages = chatHistories[contactKey].slice(chatList.children.length - 1);
-    newMessages.forEach((msg, index) => {
-      if (index === 0 && chatList.children.length === 1 && chatList.children[0].tagName === 'P') {
-        chatList.innerHTML = '';
-      }
-      const msgDiv = document.createElement('div');
-      msgDiv.className = `message ${msg.userId === currentUser.id ? 'sent' : 'received'} ${msg.replyTo ? 'reply' : ''}`;
-      msgDiv.setAttribute('data-index', chatList.children.length);
-      let statusIndicator = msg.userId === currentUser.id ? '<span class="status-indicator">Sent</span>' : '';
-      let replyContent = '';
-      if (msg.replyTo) {
-        const repliedMsg = chatHistories[contactKey][msg.replyTo - 1];
-        replyContent = `<div class="reply-to">${repliedMsg.userId === currentUser.id ? 'You' : contact.username}: ${repliedMsg.message || '[File]'}</div>`;
-      }
-      let filePreview = '';
-      if (msg.file) {
-        filePreview = `<div class="file-preview"><img src="${msg.file}" alt="Attachment" /><a href="${msg.file}" download>Download</a></div>`;
-      }
-      const avatarSrc = msg.userId === currentUser.id ? currentUser.avatar : contact.avatar;
-      msgDiv.innerHTML = `
-        <img src="${avatarSrc}" alt="Avatar" class="message-avatar">
-        <div class="message-body">
-          ${replyContent}
-          <div class="message-content">${msg.message ? parseEmojis(msg.message) : '[File]'}</div>
-          ${filePreview}
-          <div class="message-meta"><span>${msg.timestamp}</span>${statusIndicator}</div>
+function renderFriendRequests() {
+  const requestsContainer = document.createElement('div');
+  requestsContainer.innerHTML = '<h2>Your Friend Requests</h2>';
+  if (friendRequests.length === 0) {
+    requestsContainer.innerHTML += '<p>No friend requests.</p>';
+  } else {
+    friendRequests.forEach(request => {
+      const requestElement = document.createElement('div');
+      requestElement.className = 'friend-request';
+      requestElement.innerHTML = `
+        <h3>${request.username}</h3>
+        <div class="buttons">
+          <button class="accept-btn" data-request-id="${request.id}">Accept</button>
+          <button class="reject-btn" data-request-id="${request.id}">Reject</button>
         </div>
       `;
-      chatList.appendChild(msgDiv);
+      requestsContainer.appendChild(requestElement);
     });
-    chatList.scrollTop = chatList.scrollHeight;
+  }
+  // Clear previous friend requests and append new ones
+  const existingRequests = friendsSection.querySelector('.friend-requests');
+  if (existingRequests) existingRequests.remove();
+  requestsContainer.className = 'friend-requests';
+  friendsSection.appendChild(requestsContainer);
+}
+
+function submitPost(type) {
+  const content = postInput.value;
+  const anonymous = anonCheck.checked;
+  if (content && currentUser) {
+    const post = {
+      userId: currentUser.uid,
+      username: anonymous ? 'Anonymous' : currentUser.username,
+      content, timestamp: new Date().toLocaleString(),
+      type, tags: currentUser.tags || '', likes: 0, comments: []
+    };
+    database.ref('posts').push(post).then(() => {
+      console.log('Post saved:', post);
+      postInput.value = '';
+      anonCheck.checked = false;
+    }).catch(error => console.error('Error saving post:', error));
+  }
+}
+
+function showProfile(uid) {
+  fetchUserProfile(uid);
+  profilePopup.style.display = 'flex';
+}
+
+function sendFriendRequest(friendId) {
+  if (!currentUser || !currentUser.uid || !friendId) {
+    console.error('Cannot send friend request: No current user or friend ID:', { currentUser, friendId });
+    alert('Please log in to send a friend request.');
+    return;
   }
 
-  renderChatMessages();
+  // Check if the user is already a friend
+  const isAlreadyFriend = friends.some(friend => friend.id === friendId);
+  if (isAlreadyFriend) {
+    console.warn('User is already a friend:', friendId);
+    alert('Already friends!');
+    return;
+  }
 
-  chatInput.addEventListener('input', () => {
-    if (!isTyping) {
-      isTyping = true;
-      setTimeout(() => { isTyping = false; }, 2000);
+  // Check if a friend request already exists
+  database.ref('friend_requests/' + friendId + '/' + currentUser.uid).once('value', snapshot => {
+    if (snapshot.exists()) {
+      console.warn('Friend request already exists for:', friendId);
+      alert('A friend request is already pending for this user.');
+      return;
     }
+    console.log('Sending friend request from:', currentUser.uid, 'to:', friendId);
+    database.ref('friend_requests/' + friendId + '/' + currentUser.uid).set({
+      username: currentUser.username,
+      status: 'pending'
+    }).then(() => {
+      console.log('Friend request sent successfully to:', friendId);
+      fetchFriendRequests();
+    }).catch(error => {
+      console.error('Error sending friend request:', error);
+      alert('Failed to send friend request. Check console for details.');
+    });
   });
+}
 
-  let typingTimeout;
-  function simulateRecipientTyping() {
-    typingIndicator.classList.add('active');
-    typingIndicator.textContent = `${contact.username} is typing...`;
-    clearTimeout(typingTimeout);
-    typingTimeout = setTimeout(() => {
-      typingIndicator.classList.remove('active');
-    }, 1500);
+function acceptFriendRequest(requestId) {
+  const request = friendRequests.find(r => r.id === requestId);
+  if (request) {
+    database.ref('friends/' + currentUser.uid + '/' + request.id).set({
+      username: request.username
+    }).then(() => {
+      console.log('Added friend to current user:', currentUser.uid, 'with friend ID:', request.id);
+    }).catch(error => console.error('Error adding friend to current user:', error));
+
+    database.ref('friends/' + request.id + '/' + currentUser.uid).set({
+      username: currentUser.username
+    }).then(() => {
+      console.log('Added current user to friend:', request.id, 'with username:', currentUser.username);
+    }).catch(error => console.error('Error adding current user to friend:', error));
+
+    database.ref('friend_requests/' + currentUser.uid + '/' + request.id).remove().then(() => {
+      console.log('Friend request removed for:', request.id);
+      fetchFriends();
+      fetchFriendRequests();
+    }).catch(error => console.error('Error removing friend request:', error));
   }
+}
 
-  chatForm.onsubmit = async function(e) {
-    e.preventDefault();
-    let messageSent = false;
-    const timestamp = new Date().toLocaleTimeString();
+function rejectFriendRequest(requestId) {
+  database.ref('friend_requests/' + currentUser.uid + '/' + requestId).remove().then(() => {
+    console.log('Friend request rejected for:', requestId);
+    fetchFriendRequests();
+  }).catch(error => console.error('Error rejecting friend request:', error));
+}
 
-    if (chatInput.value.trim()) {
-      const response = await fetch('http://localhost:5001/api/messages', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify({ userId: currentUser.id, contactId: contact.id, message: chatInput.value })
+function removeFriend(friendId) {
+  if (!currentUser || !currentUser.uid || !friendId) {
+    console.error('Cannot remove friend: No current user or friend ID:', { currentUser, friendId });
+    alert('Please log in to remove a friend.');
+    return;
+  }
+  database.ref('friends/' + currentUser.uid + '/' + friendId).remove().then(() => {
+    console.log('Removed friend from current user:', currentUser.uid, 'friend ID:', friendId);
+  }).catch(error => console.error('Error removing friend from current user:', error));
+
+  database.ref('friends/' + friendId + '/' + currentUser.uid).remove().then(() => {
+    console.log('Removed current user from friend:', friendId, 'user ID:', currentUser.uid);
+  }).catch(error => console.error('Error removing current user from friend:', error));
+
+  fetchFriends();
+}
+
+function generateChatId(userId1, userId2) {
+  return [userId1, userId2].sort().join('_');
+}
+
+function startChat(user) {
+  currentChatUser = user;
+  const chatId = generateChatId(currentUser.uid, user.id);
+  console.log('Starting chat with:', user.username, 'Chat ID:', chatId);
+  database.ref('messages/' + chatId + '/users').set({
+    [currentUser.uid]: true,
+    [user.id]: true
+  }).then(() => {
+    switchSection('chat-section');
+    document.querySelector('.chat-header h2').textContent = `Chat with ${user.username}`;
+    renderChat(chatId);
+  }).catch(error => console.error('Error setting up chat:', error));
+}
+
+function sendMessage(message) {
+  if (!currentChatUser || !currentUser) {
+    console.error('No current chat user or current user:', { currentChatUser, currentUser });
+    return;
+  }
+  const chatId = generateChatId(currentUser.uid, currentChatUser.id);
+  console.log('Sending message to chat ID:', chatId, 'Message:', message);
+  const messageData = {
+    userId: currentUser.uid,
+    username: currentUser.username,
+    content: message,
+    timestamp: new Date().toLocaleString()
+  };
+  database.ref('messages/' + chatId + '/messages').push(messageData).then(() => {
+    console.log('Message sent successfully:', messageData);
+  }).catch(error => {
+    console.error('Error sending message:', error);
+    alert('Failed to send message. Check console for details.');
+  });
+}
+
+function renderChat(chatId) {
+  chatList.innerHTML = '';
+  if (currentChatUser) {
+    database.ref('messages/' + chatId + '/messages').on('value', snapshot => {
+      chatList.innerHTML = '';
+      if (!snapshot.exists()) {
+        chatList.innerHTML = '<p>Start the conversation!</p>';
+        return;
+      }
+      snapshot.forEach(childSnapshot => {
+        const msg = childSnapshot.val();
+        const msgElement = document.createElement('div');
+        msgElement.className = 'message ' + (msg.userId === currentUser.uid ? 'sent' : 'received');
+        msgElement.innerHTML = `<p>${msg.username}: ${msg.content} <span class="timestamp">${msg.timestamp}</span></p>`;
+        chatList.appendChild(msgElement);
       });
-      const newMessage = await response.json();
-      chatHistories[contactKey].push(newMessage);
-      messageSent = true;
-      chatInput.value = '';
-    }
-
-    if (fileInput.files.length > 0) {
-      const file = fileInput.files[0];
-      const reader = new FileReader();
-      reader.onload = async function(e) {
-        const response = await fetch('http://localhost:5001/api/messages', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-          body: JSON.stringify({ userId: currentUser.id, contactId: contact.id, file: e.target.result })
-        });
-        const newMessage = await response.json();
-        chatHistories[contactKey].push(newMessage);
-        renderChatMessages();
-        fileInput.value = '';
-      };
-      reader.readAsDataURL(file);
-      messageSent = true;
-    }
-
-    if (messageSent) {
-      replyingToMessage = null;
-      chatInput.placeholder = 'Type a message... (Use :emoji: or click 😊)';
-      renderChatMessages();
-
-      simulateRecipientTyping();
-      setTimeout(async () => {
-        const replyResponse = await fetch('http://localhost:5001/api/messages', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-          body: JSON.stringify({ userId: contact.id, contactId: currentUser.id, message: '😊 That’s weirdly cool!', replyTo: chatHistories[contactKey].length })
-        });
-        const replyMessage = await replyResponse.json();
-        chatHistories[contactKey].push(replyMessage);
-        renderChatMessages();
-      }, 2000);
-    }
-  };
-
-  clearChatBtn.onclick = function() {
-    chatHistories[contactKey] = [];
-    chatList.innerHTML = `<p>Select a match or friend to chat!</p>`;
-    typingIndicator.classList.remove('active');
-    replyingToMessage = null;
-    chatInput.placeholder = 'Type a message... (Use :emoji: or click 😊)';
-  };
-
-  backBtn.addEventListener('click', () => {
-    switchSection('matches');
-    replyingToMessage = null;
-    chatInput.placeholder = 'Type a message... (Use :emoji: or click 😊)';
-  });
-
-  emojiBtn.addEventListener('click', () => {
-    emojiPickerContainer.style.display = emojiPickerContainer.style.display === 'none' ? 'block' : 'none';
-  });
-
-  if (!emojiPicker) {
-    console.error('Emoji picker not found in DOM');
-    return;
-  }
-
-  emojiPicker.addEventListener('emoji-select', (event) => {
-    const emoji = event.detail.emoji;
-    chatInput.value += emoji.native || `:${emoji.id}:`;
-    emojiPickerContainer.style.display = 'none';
-  });
-
-  chatInput.addEventListener('keypress', (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      chatForm.dispatchEvent(new Event('submit'));
-    }
-  });
-
-  chatInput.addEventListener('input', () => {
-    chatInput.style.height = '20px';
-    chatInput.style.height = `${chatInput.scrollHeight}px`;
-    if (chatInput.scrollHeight > 100) chatInput.style.height = '100px';
-  });
-
-  function parseEmojis(text) {
-    const emojiRegex = /:([^:\s]+):/g;
-    return text.replace(emojiRegex, (match, name) => {
-      const emojiData = window.EmojiMartData.emojis[name]?.skins[0];
-      return emojiData?.native || match;
-    });
-  }
-
-  chatList.scrollTop = chatList.scrollHeight;
-}
-
-document.getElementById('post-form').addEventListener('submit', async function(e) {
-  e.preventDefault();
-  if (!currentUser) {
-    alert('Please log in to post!');
-    return;
-  }
-  const input = document.getElementById('post-input').value;
-  const isAnon = document.getElementById('anon-check').checked;
-  const userId = isAnon ? null : currentUser.id;
-
-  if (input.trim()) {
-    const timestamp = 'Just now';
-    const type = document.getElementById('post-btn').classList.contains('active') ? 'post' : 'thought';
-    const response = await fetch('http://localhost:5001/api/posts', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-      body: JSON.stringify({ userId, content: input, timestamp, type, tags: `#weird${Math.random() > 0.5 ? 'pets' : 'weather'}` })
-    });
-    const newPost = await response.json();
-    if (type === 'post') posts.unshift(newPost);
-    else thoughts.unshift(newPost);
-    document.getElementById('post-input').value = '';
-    renderFeeds();
-  }
-});
-
-document.getElementById('post-btn').addEventListener('click', function() {
-  document.getElementById('post-btn').classList.add('active');
-  document.getElementById('thought-btn').classList.remove('active');
-});
-
-document.getElementById('thought-btn').addEventListener('click', function() {
-  document.getElementById('thought-btn').classList.add('active');
-  document.getElementById('post-btn').classList.remove('active');
-});
-
-document.getElementById('post-btn').classList.add('active');
-
-document.getElementById('search-btn').addEventListener('click', () => {
-  const searchQuery = document.getElementById('username-search').value;
-  renderCards(searchQuery, 'all', 'none');
-});
-
-document.getElementById('username-search').addEventListener('keypress', (e) => {
-  if (e.key === 'Enter') {
-    const searchQuery = document.getElementById('username-search').value;
-    renderCards(searchQuery, 'all', 'none');
-  }
-});
-
-function switchSection(sectionId) {
-  document.querySelectorAll('section').forEach(section => {
-    section.classList.remove('active');
-  });
-  document.getElementById(sectionId).classList.add('active');
-  document.querySelectorAll('.nav-item').forEach(item => {
-    item.classList.remove('active');
-    if (item.getAttribute('data-section') === sectionId) {
-      item.classList.add('active');
-    }
-  });
-  if (sectionId === 'common-feed') renderCommonFeed();
-  else if (sectionId === 'weird-feed') renderWeirdFeed();
-  else if (sectionId === 'matches') renderMatches();
-  else if (sectionId === 'friends') renderFriends();
-}
-
-document.querySelectorAll('.nav-item').forEach(item => {
-  item.addEventListener('click', () => {
-    switchSection(item.getAttribute('data-section'));
-  });
-});
-
-document.querySelectorAll('.toggle-btn').forEach(btn => {
-  btn.addEventListener('click', function() {
-    document.querySelectorAll('.toggle-btn').forEach(b => b.classList.remove('active'));
-    this.classList.add('active');
-    renderCommonFeed();
-  });
-});
-
-document.getElementById('theme-toggle').addEventListener('click', () => {
-  document.body.classList.toggle('dark-mode');
-  document.body.classList.toggle('light-mode');
-  const isDark = document.body.classList.contains('dark-mode');
-  const themeToggle = document.getElementById('theme-toggle');
-  themeToggle.classList.toggle('light', !isDark);
-  themeToggle.classList.toggle('dark', isDark);
-  themeToggle.querySelector('i').className = isDark ? 'fas fa-moon' : 'fas fa-sun';
-});
-
-document.querySelectorAll('.profile-popup .close-btn, .auth-popup .close-btn').forEach(btn => {
-  btn.addEventListener('click', () => {
-    document.querySelector('.profile-popup').style.display = 'none';
-    document.getElementById('login-popup').style.display = 'none';
-    document.getElementById('register-popup').style.display = 'none';
-  });
-});
-
-// Authentication handling
-const loginPopup = document.getElementById('login-popup');
-const registerPopup = document.getElementById('register-popup');
-const authBtn = document.getElementById('auth-btn');
-const authText = document.getElementById('auth-text');
-
-authBtn.addEventListener('click', () => {
-  if (currentUser) {
-    // Logout
-    localStorage.removeItem('token');
-    token = null;
-    currentUser = null;
-    authText.textContent = 'Login';
-    alert('Logged out successfully!');
+      chatList.scrollTop = chatList.scrollHeight;
+      console.log('Chat updated for chatId:', chatId);
+    }, error => console.error('Error fetching messages:', error));
   } else {
-    loginPopup.style.display = 'flex';
+    chatList.innerHTML = '<p>Select a match or friend to chat!</p>';
   }
-});
-
-document.getElementById('show-register').addEventListener('click', (e) => {
-  e.preventDefault();
-  loginPopup.style.display = 'none';
-  registerPopup.style.display = 'flex';
-});
-
-document.getElementById('show-login').addEventListener('click', (e) => {
-  e.preventDefault();
-  registerPopup.style.display = 'none';
-  loginPopup.style.display = 'flex';
-});
-
-document.getElementById('login-form').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const email = document.getElementById('login-email').value;
-  const password = document.getElementById('login-password').value;
-
-  try {
-    const response = await fetch('http://localhost:5001/api/users/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password })
-    });
-    const data = await response.json();
-    if (response.ok) {
-      token = data.token;
-      currentUser = data.user;
-      localStorage.setItem('token', token);
-      authText.textContent = 'Logout';
-      loginPopup.style.display = 'none';
-      alert('Logged in successfully!');
-      fetchInitialData(); // Refresh data
-    } else {
-      alert(data.message);
-    }
-  } catch (error) {
-    console.error('Login error:', error);
-    alert('An error occurred during login.');
-  }
-});
-
-document.getElementById('register-form').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const username = document.getElementById('register-username').value;
-  const email = document.getElementById('register-email').value;
-  const password = document.getElementById('register-password').value;
-  const thought = document.getElementById('register-thought').value;
-  const tags = document.getElementById('register-tags').value;
-  const bio = document.getElementById('register-bio').value;
-
-  try {
-    const response = await fetch('http://localhost:5001/api/users/register', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, email, password, thought, tags, bio })
-    });
-    const data = await response.json();
-    if (response.ok) {
-      token = data.token;
-      currentUser = data.user;
-      localStorage.setItem('token', token);
-      authText.textContent = 'Logout';
-      registerPopup.style.display = 'none';
-      alert('Registered and logged in successfully!');
-      fetchInitialData(); // Refresh data
-    } else {
-      alert(data.message);
-    }
-  } catch (error) {
-    console.error('Register error:', error);
-    alert('An error occurred during registration.');
-  }
-});
-
-// Initialize the app
-fetchInitialData();
-switchSection('match-feed');
-
-// Ensure the profile popup is hidden on page load
-document.addEventListener('DOMContentLoaded', () => {
-  document.querySelector('.profile-popup').style.display = 'none';
-});
+}

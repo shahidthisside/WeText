@@ -5,20 +5,20 @@
   box-sizing: border-box;
 }
 
-/* Theme Variables (from your previous CSS) */
+/* Theme Variables */
 :root {
-  --background: #1a1a1a; /* Default dark mode background */
-  --text: #e0e0e0; /* Default dark mode text */
-  --primary: #8a4af3; /* Grok purple */
-  --primary-dark: #6f3cc3; /* Darker shade for hover */
-  --border: #333; /* Default dark mode border */
-  --input-bg: #2a2a2a; /* Default dark mode input background */
+  --background: #1a1a1a;
+  --text: #e0e0e0;
+  --primary: #8a4af3;
+  --primary-dark: #6f3cc3;
+  --border: #333;
+  --input-bg: #2a2a2a;
 }
 
 /* Theme-specific variables for dark mode */
 body.dark-mode {
-  background: #0a0a0f; /* Updated dark mode background from your CSS */
-  color: #d0d0d5; /* Updated dark mode text color */
+  background: #0a0a0f;
+  color: #d0d0d5;
   --header-bg: #1a1a23;
   --sidebar-bg: #12121a;
   --nav-item-bg: #1a1a23;
@@ -34,8 +34,8 @@ body.dark-mode {
 
 /* Theme-specific variables for light mode */
 body.light-mode {
-  background: #ffffff; /* Updated light mode background from your CSS */
-  color: #1a1a2e; /* Updated light mode text color */
+  background: #ffffff;
+  color: #1a1a2e;
   --header-bg: #ffffff;
   --sidebar-bg: #f0f0f5;
   --nav-item-bg: #e0e0e5;
@@ -47,12 +47,12 @@ body.light-mode {
   --textarea-text: #1a1a2e;
   --shadow-opacity: 0.1;
   --message-hover-bg: #e0e0e5;
-  --background: #f0f0f0; /* Light mode background fallback */
-  --text: #333; /* Light mode text fallback */
-  --primary: #4a90e2; /* Fallback primary color */
-  --primary-dark: #357abd; /* Fallback primary dark color */
-  --border: #ccc; /* Light mode border */
-  --input-bg: #fff; /* Light mode input background */
+  --background: #f0f0f0;
+  --text: #333;
+  --primary: #4a90e2;
+  --primary-dark: #357abd;
+  --border: #ccc;
+  --input-bg: #fff;
 }
 
 /* Base Body Styles */
@@ -64,7 +64,7 @@ body {
   height: 100vh;
 }
 
-/* Header Styles (from your previous CSS) */
+/* Header Styles */
 header {
   background: var(--header-bg);
   padding: 15px 30px;
@@ -79,7 +79,7 @@ header h1 {
   color: #8a4af3;
 }
 
-/* Main Container (from your previous CSS) */
+/* Main Container */
 .main-container {
   display: flex;
   height: calc(100vh - 70px);
@@ -87,77 +87,77 @@ header h1 {
 
 /* Sidebar Styles */
 .sidebar {
-  width: 200px; /* Updated from your CSS */
+  width: 200px;
   background: var(--sidebar-bg);
   padding: 20px;
   display: flex;
   flex-direction: column;
-  gap: 15px; /* Updated from your CSS */
-  border-right: 1px solid var(--border); /* From earlier CSS */
+  gap: 15px;
+  border-right: 1px solid var(--border);
 }
 
 /* Navigation Items */
 .nav-item {
-  padding: 15px; /* Updated from your CSS */
+  padding: 15px;
   background: var(--nav-item-bg);
-  border-radius: 10px; /* Updated from your CSS */
-  text-align: center; /* Updated from your CSS */
+  border-radius: 10px;
+  text-align: center;
   color: var(--nav-text-color);
   cursor: pointer;
   transition: background 0.3s, transform 0.2s, color 0.3s;
-  display: flex; /* Updated from your CSS */
-  align-items: center; /* Updated from your CSS */
-  gap: 10px; /* Updated from your CSS */
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 
 .nav-item:hover,
 .nav-item.active {
-  background: #8a4af3; /* Updated from your CSS */
+  background: #8a4af3;
   color: #ffffff;
-  transform: translateX(5px); /* Updated from your CSS */
+  transform: translateX(5px);
 }
 
 .nav-item i {
-  font-size: 16px; /* Updated from your CSS */
-  margin-right: 10px; /* From earlier CSS */
+  font-size: 16px;
+  margin-right: 10px;
 }
 
 /* Theme Toggle Button */
 #theme-toggle {
-  margin-top: auto; /* From earlier CSS */
-  width: 100%; /* From earlier CSS */
-  text-align: left; /* From earlier CSS */
-  padding-left: 20px; /* From earlier CSS */
-  background: transparent; /* Updated from your CSS */
+  margin-top: auto;
+  width: 100%;
+  text-align: left;
+  padding-left: 20px;
+  background: transparent;
   border: none;
   color: var(--nav-text-color);
-  font-size: 18px; /* Updated from your CSS */
+  font-size: 18px;
   cursor: pointer;
-  transition: color 0.3s; /* Updated from your CSS */
+  transition: color 0.3s;
 }
 
 #theme-toggle:hover {
-  color: #8a4af3; /* Updated from your CSS */
+  color: #8a4af3;
 }
 
 #theme-toggle i {
-  transition: transform 0.3s; /* Updated from your CSS */
+  transition: transform 0.3s;
 }
 
 #theme-toggle.light i {
-  color: #ffd700; /* From earlier CSS */
+  color: #ffd700;
 }
 
 #theme-toggle.dark i {
-  color: #f0f0f0; /* From earlier CSS */
+  color: #f0f0f0;
 }
 
 #theme-toggle.light .fas.fa-moon {
-  display: none; /* Updated from your CSS */
+  display: none;
 }
 
 #theme-toggle.dark .fas.fa-sun {
-  display: none; /* Updated from your CSS */
+  display: none;
 }
 
 /* Main Content */
@@ -181,48 +181,60 @@ section.active {
 .common-feed,
 .weird-feed,
 .matches,
-.friends {
+.friends,
+.chat-section {
   overflow-y: auto;
+  display: none;
+}
+
+.match-feed.active,
+.common-feed.active,
+.weird-feed.active,
+.matches.active,
+.friends.active,
+.chat-section.active {
+  display: block;
 }
 
 /* Headings */
 h2 {
-  color: #8a4af3; /* Updated from your CSS */
+  color: #8a4af3;
   margin-bottom: 20px;
 }
 
 /* Search Bar */
 .search-bar {
   margin-bottom: 20px;
-  display: flex;
+  display: flex !important;
   gap: 10px;
-  width: 100%; /* Updated from your CSS */
+  width: 100%;
+  align-items: center;
 }
 
 .search-bar input {
   flex: 1;
-  padding: 8px; /* Updated from your CSS */
-  border-radius: 20px; /* Updated from your CSS */
-  border: 1px solid #8a4af3; /* Updated from your CSS */
+  padding: 8px;
+  border-radius: 20px;
+  border: 1px solid #8a4af3;
   background: var(--textarea-bg);
   color: var(--textarea-text);
-  min-width: 200px; /* Updated from your CSS */
+  min-width: 200px;
 }
 
 /* Search Button */
 .search-bar button#search-btn {
-  background: #8a4af3; /* Updated from your CSS */
+  background: #8a4af3;
   color: #ffffff;
   border: none;
-  border-radius: 20px; /* Updated from your CSS */
-  padding: 8px 15px; /* Updated from your CSS */
+  border-radius: 20px;
+  padding: 8px 15px;
   cursor: pointer;
   transition: background 0.3s, transform 0.2s;
 }
 
 .search-bar button#search-btn:hover {
-  background: #6f3cc3; /* Updated from your CSS */
-  transform: scale(1.05); /* Updated from your CSS */
+  background: #6f3cc3;
+  transform: scale(1.05);
 }
 
 /* Filters */
@@ -253,59 +265,62 @@ select:focus {
 .card,
 .post,
 .match,
-.friend {
+.friend,
+.friend-request {
   background: var(--card-bg);
   padding: 15px;
   margin-bottom: 15px;
-  border-radius: 15px; /* Updated from your CSS */
-  box-shadow: 0 4px 15px rgba(0, 0, 0, var(--shadow-opacity)); /* Updated from your CSS */
+  border-radius: 15px;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, var(--shadow-opacity));
   transition: transform 0.3s, opacity 0.3s;
+  display: block;
 }
 
 .card:hover,
 .match:hover,
-.friend:hover {
-  transform: translateY(-5px); /* Updated from your CSS */
+.friend:hover,
+.friend-request:hover {
+  transform: translateY(-5px);
 }
 
 .post {
   opacity: 0;
-  animation: slideIn 0.5s forwards; /* Updated from your CSS */
+  animation: slideIn 0.5s forwards;
 }
 
 /* Buttons */
 .buttons {
-  margin-top: 10px; /* Updated from your CSS */
-  display: flex; /* From earlier CSS */
-  gap: 10px; /* From earlier CSS */
+  margin-top: 10px;
+  display: flex;
+  gap: 10px;
 }
 
 button {
-  padding: 8px 15px; /* Updated from your CSS */
-  margin: 5px; /* Updated from your CSS */
-  background: #8a4af3; /* Updated from your CSS */
+  padding: 8px 15px;
+  margin: 5px;
+  background: #8a4af3;
   color: #ffffff;
   border: none;
-  border-radius: 20px; /* Updated from your CSS */
+  border-radius: 20px;
   cursor: pointer;
   transition: background 0.3s, transform 0.2s;
 }
 
 button:hover {
-  background: #6f3cc3; /* Updated from your CSS */
-  transform: scale(1.05); /* Updated from your CSS */
+  background: #6f3cc3;
+  transform: scale(1.05);
 }
 
 .remove-btn {
-  background: #ff4444; /* Updated from your CSS */
+  background: #ff4444;
 }
 
 .remove-btn:hover {
-  background: #cc0000; /* Updated from your CSS */
+  background: #cc0000;
 }
 
 .reply-btn {
-  background: #28a745; /* Updated from your CSS */
+  background: #28a745;
   color: #ffffff;
   border: none;
   border-radius: 20px;
@@ -315,29 +330,33 @@ button:hover {
 }
 
 .reply-btn:hover {
-  background: #218838; /* Updated from your CSS */
+  background: #218838;
   transform: scale(1.05);
 }
 
 .like-btn {
-  background: #ff9900; /* Updated from your CSS */
+  background: #ff9900;
 }
 
 .like-btn:hover {
-  background: #e68a00; /* Updated from your CSS */
+  background: #e68a00;
 }
 
 .comment-btn,
-.friend-btn {
-  background: #6f42c1; /* Updated from your CSS */
+.friend-btn,
+.accept-btn,
+.reject-btn {
+  background: #6f42c1;
 }
 
 .comment-btn:hover,
-.friend-btn:hover {
-  background: #5a32a3; /* Updated from your CSS */
+.friend-btn:hover,
+.accept-btn:hover,
+.reject-btn:hover {
+  background: #5a32a3;
 }
 
-/* Post Type Buttons (Toggle Buttons in Common Feed) */
+/* Post Type Buttons */
 .post-type-buttons {
   margin-top: 10px;
   display: flex;
@@ -360,28 +379,28 @@ button:hover {
   border: 2px solid #ffffff;
 }
 
-/* Toggle Buttons (Common Feed) */
+/* Toggle Buttons */
 .toggle-buttons {
   margin-bottom: 15px;
 }
 
 .toggle-btn {
-  padding: 8px 20px; /* Updated from your CSS */
-  margin-right: 10px; /* From earlier CSS */
-  background: var(--nav-item-bg); /* Updated from your CSS */
-  color: var(--nav-text-color); /* Updated from your CSS */
-  border: 1px solid var(--border); /* From earlier CSS */
-  border-radius: 4px; /* From earlier CSS */
+  padding: 8px 20px;
+  margin-right: 10px;
+  background: var(--nav-item-bg);
+  color: var(--nav-text-color);
+  border: 1px solid var(--border);
+  border-radius: 4px;
   cursor: pointer;
 }
 
 .toggle-btn.active {
-  background: #8a4af3; /* Updated from your CSS */
+  background: #8a4af3;
   color: #ffffff;
 }
 
 .toggle-btn:hover {
-  background: #6f3cc3; /* Updated from your CSS */
+  background: #6f3cc3;
 }
 
 /* Textarea */
@@ -389,8 +408,8 @@ textarea {
   width: 100%;
   padding: 10px;
   margin-bottom: 10px;
-  border-radius: 10px; /* Updated from your CSS */
-  border: 1px solid #8a4af3; /* Updated from your CSS */
+  border-radius: 10px;
+  border: 1px solid #8a4af3;
   background: var(--textarea-bg);
   color: var(--textarea-text);
   resize: none;
@@ -399,8 +418,10 @@ textarea {
 /* Post Form */
 .post-form {
   margin-top: 15px;
-  display: flex;
+  display: flex !important;
   gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
 }
 
 .post-form input[type="text"] {
@@ -410,37 +431,48 @@ textarea {
   border-radius: 4px;
   background: var(--input-bg);
   color: var(--text);
+  min-width: 200px;
+}
+
+.post-form input[type="checkbox"] {
+  margin-left: 10px;
+}
+
+/* Weird Feed */
+#feed {
+  display: block;
+  overflow-y: auto;
 }
 
 /* Profile Popup */
 .profile-popup {
-  position: fixed; /* Updated from your CSS */
+  position: fixed;
   top: 0;
   left: 0;
   width: 100%;
   height: 100%;
   background: rgba(0, 0, 0, 0.7);
-  display: flex; /* Updated from your CSS */
+  display: flex;
   justify-content: center;
   align-items: center;
-  animation: fadeIn 0.3s; /* Updated from your CSS */
-  z-index: 1000; /* From earlier CSS */
+  animation: fadeIn 0.3s;
+  z-index: 1000;
 }
 
-/* Popup Content (Renamed from .profile-content to .popup-content to match your CSS) */
+/* Popup Content */
 .popup-content {
   background: var(--card-bg);
-  padding: 25px; /* Updated from your CSS */
-  border-radius: 20px; /* Updated from your CSS */
-  max-width: 500px; /* Updated from your CSS */
-  width: 90%; /* Updated from your CSS */
-  box-shadow: 0 10px 30px rgba(0, 0, 0, var(--shadow-opacity)); /* Updated from your CSS */
-  animation: slideInPopup 0.4s ease-out; /* Updated from your CSS */
-  text-align: center; /* From earlier CSS */
+  padding: 25px;
+  border-radius: 20px;
+  max-width: 500px;
+  width: 90%;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, var(--shadow-opacity));
+  animation: slideInPopup 0.4s ease-out;
+  text-align: center;
 }
 
 .popup-content h2 {
-  margin-bottom: 10px; /* From earlier CSS */
+  margin-bottom: 10px;
 }
 
 .popup-content img {
@@ -448,7 +480,7 @@ textarea {
   margin-bottom: 10px;
 }
 
-/* Profile Header (Inside Popup) */
+/* Profile Header */
 .profile-header {
   display: flex;
   align-items: center;
@@ -466,7 +498,7 @@ textarea {
 
 /* Edit Profile Button */
 #edit-profile {
-  background: #8a4af3; /* Updated from your CSS */
+  background: #8a4af3;
   color: #ffffff;
   border: none;
   border-radius: 20px;
@@ -476,227 +508,230 @@ textarea {
 }
 
 #edit-profile:hover {
-  background: #6f3cc3; /* Updated from your CSS */
+  background: #6f3cc3;
   transform: scale(1.05);
 }
 
 /* Chat Section */
 .chat-section {
-  position: relative; /* Updated from your CSS */
+  position: relative;
   background: var(--chat-bg);
   border-radius: 0 0 10px 10px;
   box-shadow: 0 -2px 10px rgba(0, 0, 0, var(--shadow-opacity));
-  display: none; /* From earlier CSS */
-  flex-direction: column; /* From earlier CSS */
-  height: 100%; /* From earlier CSS */
+  display: none;
+  flex-direction: column;
+  height: 100%;
+}
+
+.chat-section.active {
+  display: flex !important;
 }
 
 /* Chat Header */
 .chat-header {
   background: var(--header-bg);
-  padding: 10px 20px; /* Updated from your CSS */
+  padding: 10px 20px;
   display: flex;
   align-items: center;
   gap: 10px;
-  border-bottom: 1px solid var(--card-bg); /* Updated from your CSS */
-  box-shadow: 0 2px 5px rgba(0, 0, 0, var(--shadow-opacity)); /* Updated from your CSS */
+  border-bottom: 1px solid var(--card-bg);
+  box-shadow: 0 2px 5px rgba(0, 0, 0, var(--shadow-opacity));
 }
 
-/* Chat Header Title */
 .chat-header h2 {
-  font-size: 18px; /* Updated from your CSS */
+  font-size: 18px;
   color: #8a4af3;
-  margin: 0; /* Updated from your CSS */
-  flex-grow: 1; /* Updated from your CSS */
-  text-align: center; /* Updated from your CSS */
+  margin: 0;
+  flex-grow: 1;
+  text-align: center;
 }
 
 /* Back Button */
 .back-btn {
-  background: transparent; /* Updated from your CSS */
+  background: transparent;
   border: none;
   color: var(--nav-text-color);
-  font-size: 18px; /* Updated from your CSS */
+  font-size: 18px;
   cursor: pointer;
   transition: color 0.3s;
 }
 
 .back-btn:hover {
-  color: #8a4af3; /* Updated from your CSS */
+  color: #8a4af3;
 }
 
 /* Chat List */
 #chat-list {
-  max-height: 70vh; /* Updated from your CSS */
+  max-height: 70vh;
   overflow-y: auto;
-  padding: 20px; /* Updated from your CSS */
+  padding: 20px;
   background: var(--chat-bg);
   border-radius: 0 0 10px 10px;
-  flex: 1; /* From earlier CSS */
-  display: flex; /* From earlier CSS */
-  flex-direction: column; /* From earlier CSS */
-  gap: 10px; /* From earlier CSS */
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
 /* Message Styles */
 .message {
-  display: flex; /* Updated from your CSS */
-  align-items: flex-start; /* Updated from your CSS */
-  gap: 10px; /* Updated from your CSS */
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
   max-width: 70%;
-  margin: 10px 0; /* Updated from your CSS */
-  padding: 12px 18px; /* Updated from your CSS */
+  margin: 10px 0;
+  padding: 12px 18px;
   border-radius: 20px;
-  position: relative; /* Updated from your CSS */
-  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.15); /* Updated from your CSS */
+  position: relative;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.15);
   cursor: pointer;
-  opacity: 0; /* Updated from your CSS */
-  animation: fadeInMessage 0.3s ease-in forwards; /* Updated from your CSS */
+  opacity: 0;
+  animation: fadeInMessage 0.3s ease-in forwards;
 }
 
 .message:hover {
-  background: var(--message-hover-bg); /* Updated from your CSS */
+  background: var(--message-hover-bg);
 }
 
 .message.sent {
-  background: #8a4af3; /* Updated from your CSS */
+  background: #8a4af3;
   margin-left: auto;
   color: #ffffff;
-  flex-direction: row-reverse; /* Updated from your CSS */
+  flex-direction: row-reverse;
 }
 
 .message.received {
-  background: var(--card-bg); /* Updated from your CSS */
+  background: var(--card-bg);
   margin-right: auto;
   color: var(--chat-text);
 }
 
 /* Message Avatar */
 .message-avatar {
-  width: 40px; /* Updated from your CSS */
+  width: 40px;
   height: 40px;
   border-radius: 50%;
-  object-fit: cover; /* Updated from your CSS */
-  border: 1px solid #8a4af3; /* Updated from your CSS */
+  object-fit: cover;
+  border: 1px solid #8a4af3;
 }
 
 /* Message Body */
 .message-body {
-  flex: 1; /* Updated from your CSS */
+  flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 5px; /* Updated from your CSS */
+  gap: 5px;
 }
 
 /* Message Content */
 .message-content {
-  word-wrap: break-word; /* Updated from your CSS */
+  word-wrap: break-word;
   font-size: 14px;
 }
 
 /* Message Meta */
 .message-meta {
-  display: flex; /* Updated from your CSS */
-  justify-content: flex-end; /* Updated from your CSS */
-  gap: 5px; /* Updated from your CSS */
+  display: flex;
+  justify-content: flex-end;
+  gap: 5px;
   font-size: 0.7em;
-  color: #ffffff; /* Updated from your CSS */
+  color: #ffffff;
 }
 
 .message.received .message-meta {
-  color: var(--chat-text); /* Updated from your CSS */
+  color: var(--chat-text);
 }
 
 .message .status-indicator,
 .message .read-receipt {
-  font-size: 0.6em; /* Updated from your CSS */
-  margin-left: 0; /* Updated from your CSS */
+  font-size: 0.6em;
+  margin-left: 0;
 }
 
 .status-indicator {
-  color: #ffffff; /* Updated from your CSS */
+  color: #ffffff;
 }
 
 .read-receipt {
-  color: #28a745; /* Updated from your CSS */
+  color: #28a745;
 }
 
 /* Reply Message */
 .message.reply {
-  margin-left: 20px; /* Updated from your CSS */
-  border-left: 2px solid #8a4af3; /* Updated from your CSS */
+  margin-left: 20px;
+  border-left: 2px solid #8a4af3;
   padding-left: 10px;
 }
 
 /* Reply To */
 .reply-to {
   font-size: 0.8em;
-  color: #8a4af3; /* Updated from your CSS */
+  color: #8a4af3;
   margin-bottom: 5px;
 }
 
 /* File Preview */
 .file-preview {
-  margin-top: 10px; /* Updated from your CSS */
-  max-width: 200px; /* Updated from your CSS */
+  margin-top: 10px;
+  max-width: 200px;
   border-radius: 10px;
   border: 1px solid #8a4af3;
   overflow: hidden;
-  position: relative; /* Updated from your CSS */
+  position: relative;
 }
 
 .file-preview img {
-  width: 100%; /* Updated from your CSS */
+  width: 100%;
   height: auto;
   display: block;
 }
 
 .file-preview a {
-  position: absolute; /* Updated from your CSS */
+  position: absolute;
   bottom: 5px;
   right: 5px;
   background: #8a4af3;
   color: #ffffff;
   padding: 5px 10px;
-  border-radius: 15px; /* Updated from your CSS */
+  border-radius: 15px;
   text-decoration: none;
   font-size: 12px;
   transition: background 0.3s;
 }
 
 .file-preview a:hover {
-  background: #6f3cc3; /* Updated from your CSS */
+  background: #6f3cc3;
 }
 
 /* Typing Indicator */
 #typing-indicator {
-  color: #8a4af3; /* Updated from your CSS */
+  color: #8a4af3;
   font-style: italic;
-  padding: 10px; /* Updated from your CSS */
-  text-align: center; /* Updated from your CSS */
+  padding: 10px;
+  text-align: center;
   font-size: 14px;
-  opacity: 0; /* Updated from your CSS */
+  opacity: 0;
   transition: opacity 0.3s ease-in-out;
 }
 
 #typing-indicator.active {
-  opacity: 1; /* Updated from your CSS */
+  opacity: 1;
 }
 
 /* Clear Chat Button */
 #clear-chat {
-  background: #ff4444; /* Updated from your CSS */
+  background: #ff4444;
 }
 
 #clear-chat:hover {
-  background: #cc0000; /* Updated from your CSS */
+  background: #cc0000;
 }
 
 /* Chat Form */
 .chat-form {
   padding: 10px;
   background: var(--background);
-  display: none;
+  display: flex !important;
   flex-direction: row;
   gap: 10px;
   align-items: center;
@@ -705,16 +740,16 @@ textarea {
 /* Chat Input */
 #chat-input {
   flex: 1;
-  border: none; /* Updated from your CSS */
-  background: transparent; /* Updated from your CSS */
+  border: none;
+  background: transparent;
   resize: none;
-  outline: none; /* Updated from your CSS */
+  outline: none;
   color: var(--chat-text);
   font-size: 14px;
   min-height: 20px;
   max-height: 100px;
-  overflow-y: auto; /* Updated from your CSS */
-  width: 100%; /* Updated from your CSS */
+  overflow-y: auto;
+  width: 100%;
 }
 
 /* Chat Input Container */
@@ -796,17 +831,17 @@ emoji-picker {
 }
 
 .comment {
-  background: var(--chat-bg); /* Updated from your CSS */
+  background: var(--chat-bg);
   padding: 10px;
-  margin: 5px 0; /* Updated from your CSS */
+  margin: 5px 0;
   border-radius: 10px;
 }
 
 /* Reply */
 .reply {
-  background: var(--chat-bg); /* Updated from your CSS */
-  padding: 8px; /* Updated from your CSS */
-  margin: 5px 0; /* Updated from your CSS */
+  background: var(--chat-bg);
+  padding: 8px;
+  margin: 5px 0;
   border-radius: 8px;
 }
 
@@ -840,6 +875,10 @@ emoji-picker {
   z-index: 1000;
   justify-content: center;
   align-items: center;
+}
+
+.auth-popup.active {
+  display: flex !important;
 }
 
 /* Authentication Content */
@@ -907,43 +946,21 @@ emoji-picker {
 
 /* Animations */
 @keyframes fadeIn {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 @keyframes slideIn {
-  from {
-    opacity: 0;
-    transform: translateX(-20px);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(0);
-  }
+  from { opacity: 0; transform: translateX(-20px); }
+  to { opacity: 1; transform: translateX(0); }
 }
 
 @keyframes slideInPopup {
-  from {
-    opacity: 0;
-    transform: translateY(50px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  from { opacity: 0; transform: translateY(50px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 @keyframes fadeInMessage {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
 }

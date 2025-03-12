@@ -1026,3 +1026,12 @@ emoji-picker {
   from { opacity: 0; transform: translateY(10px); }
   to { opacity: 1; transform: translateY(0); }
 }
+
+#resend-verification {
+  color: #8a4af3;
+  text-decoration: underline;
+  cursor: pointer;
+}
+#resend-verification:hover {
+  color: #6a3db8;
+}

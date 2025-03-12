@@ -63,11 +63,40 @@ function isValidUsername(username) {
   return usernameRegex.test(username);
 }
 
+// Function to send verification email
+async function sendVerificationEmail(user) {
+  try {
+    if (typeof user.sendEmailVerification === 'function') {
+      await user.sendEmailVerification();
+      alert('A verification email has been sent to ' + user.email + '. Please verify your email before logging in.');
+    } else {
+      throw new Error('sendEmailVerification is not a function on the user object');
+    }
+  } catch (error) {
+    console.error('Error sending verification email:', error);
+    alert('Failed to send verification email. Error: ' + error.message);
+  }
+}
+
 // Event Listeners
 document.addEventListener('DOMContentLoaded', () => {
   auth.onAuthStateChanged(user => {
     if (user) {
-      currentUser = { ...user, uid: user.uid };
+      // Check if the email is verified
+      if (!user.emailVerified) {
+        alert('Please verify your email before proceeding. Check your inbox for a verification link.');
+        auth.signOut().then(() => {
+          authText.textContent = 'Login';
+          authBtn.setAttribute('data-action', 'login');
+          currentUser = null;
+          authPopup.style.display = 'flex';
+          clearProfileSection();
+        });
+        return;
+      }
+
+      // Proceed if email is verified
+      currentUser = { ...user, uid: user.uid, email: user.email }; // Preserve email and uid
       authText.textContent = 'Logout';
       authBtn.setAttribute('data-action', 'logout');
       console.log('User logged in:', currentUser);
@@ -116,7 +145,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const email = document.getElementById('login-email').value;
     const password = document.getElementById('login-password').value;
     auth.signInWithEmailAndPassword(email, password).then(userCredential => {
-      currentUser = { ...userCredential.user, uid: userCredential.user.uid };
+      currentUser = { ...userCredential.user, uid: userCredential.user.uid, email: userCredential.user.email };
       console.log('User logged in via login form:', currentUser);
       authPopup.style.display = 'none';
     }).catch(error => alert(error.message));
@@ -144,11 +173,17 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
-    auth.createUserWithEmailAndPassword(email, password).then(userCredential => {
-      currentUser = { ...userCredential.user, uid: userCredential.user.uid };
-      console.log('User registered:', currentUser);
-      return database.ref('users/' + currentUser.uid).set({
-        name: username, // Using username as name for simplicity; can be modified to add a separate name field
+    try {
+      const userCredential = await auth.createUserWithEmailAndPassword(email, password);
+      const user = userCredential.user; // Use the original user object
+      console.log('User registered:', user);
+
+      // Send verification email using the original user object
+      await sendVerificationEmail(user);
+
+      // Save user data to the database
+      await database.ref('users/' + user.uid).set({
+        name: username,
         username,
         email,
         thought,
@@ -159,10 +194,17 @@ document.addEventListener('DOMContentLoaded', () => {
         comments: 0,
         match: Math.floor(Math.random() * 100)
       });
-    }).then(() => {
+
+      // Sign out the user after registration to enforce email verification
+      await auth.signOut();
       registerPopup.style.display = 'none';
-      fetchUserProfile(currentUser.uid);
-    }).catch(error => alert(error.message));
+      alert('Registration successful! Please check your email to verify your account.');
+      currentUser = null;
+      authPopup.style.display = 'flex';
+    } catch (error) {
+      console.error('Registration error:', error);
+      alert('Registration failed. Error: ' + error.message);
+    }
   });
 
   editProfileBtn?.addEventListener('click', () => {
@@ -463,6 +505,31 @@ document.addEventListener('DOMContentLoaded', () => {
       document.querySelectorAll('.weird-feed .toggle-btn').forEach(btn => btn.classList.remove('active'));
       toggleBtn.classList.add('active');
       renderWeirdFeed();
+    }
+  });
+
+  // Add resend verification email handler
+  document.getElementById('resend-verification')?.addEventListener('click', async (e) => {
+    e.preventDefault();
+    const email = document.getElementById('login-email').value;
+    if (!email) {
+      alert('Please enter your email to resend the verification email.');
+      return;
+    }
+
+    try {
+      const userCredential = await auth.signInWithEmailAndPassword(email, document.getElementById('login-password').value);
+      const user = userCredential.user;
+      if (!user.emailVerified) {
+        await sendVerificationEmail(user);
+        await auth.signOut();
+        alert('Verification email resent. Please check your inbox.');
+      } else {
+        alert('Your email is already verified. You can log in.');
+      }
+    } catch (error) {
+      console.error('Error resending verification email:', error);
+      alert('Failed to resend verification email. Error: ' + error.message);
     }
   });
 });

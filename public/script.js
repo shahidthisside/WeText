@@ -9,6 +9,7 @@ let friendRequests = [];
 let messages = {};
 let currentChatUser = null;
 let currentWeirdFeedTab = 'posts'; // Default to "Posts" tab
+let chatUsers = []; // To store users the current user has chatted with
 
 // DOM Elements
 const authPopup = document.getElementById('login-popup');
@@ -51,6 +52,8 @@ const backBtn = document.querySelector('.back-btn');
 const clearChatBtn = document.getElementById('clear-chat');
 const typingIndicator = document.getElementById('typing-indicator');
 const editProfileBtn = document.getElementById('edit-profile-btn');
+const chatUsersContainer = document.getElementById('chat-users');
+const chatHeader = document.querySelector('.chat-header h2');
 
 // Firebase Authentication and Database
 const auth = firebase.auth();
@@ -58,7 +61,6 @@ const database = firebase.database();
 
 // Validation Function
 function isValidUsername(username) {
-  // Regex: Must contain at least one letter, and only allow letters and numbers, no spaces or special characters
   const usernameRegex = /^(?=.*[a-zA-Z])[a-zA-Z0-9]+$/;
   return usernameRegex.test(username);
 }
@@ -82,7 +84,6 @@ async function sendVerificationEmail(user) {
 document.addEventListener('DOMContentLoaded', () => {
   auth.onAuthStateChanged(user => {
     if (user) {
-      // Check if the email is verified
       if (!user.emailVerified) {
         alert('Please verify your email before proceeding. Check your inbox for a verification link.');
         auth.signOut().then(() => {
@@ -95,24 +96,25 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       }
 
-      // Proceed if email is verified
-      currentUser = { ...user, uid: user.uid, email: user.email }; // Preserve email and uid
+      currentUser = { ...user, uid: user.uid, email: user.email };
       authText.textContent = 'Logout';
       authBtn.setAttribute('data-action', 'logout');
       console.log('User logged in:', currentUser);
-      fetchUserProfile(user.uid); // Fetch user profile for display in "My Profile" section
+      fetchUserProfile(user.uid);
       fetchProfiles();
       fetchPosts();
       fetchMatches();
       fetchFriends();
       fetchFriendRequests();
-      switchSection('match-feed'); // Default to match-feed on login
+      fetchChatUsers(); // Fetch users the current user has chatted with
+      switchSection('match-feed');
     } else {
       authText.textContent = 'Login';
       authBtn.setAttribute('data-action', 'login');
       currentUser = null;
       authPopup.style.display = 'flex';
-      clearProfileSection(); // Clear profile section when logged out
+      clearProfileSection();
+      chatUsersContainer.innerHTML = '<p>Please log in to view your chats.</p>';
     }
   });
 
@@ -160,13 +162,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const tags = document.getElementById('register-tags').value || '';
     const bio = document.getElementById('register-bio').value || '';
 
-    // Validate username format
     if (!isValidUsername(username)) {
       alert('Username must contain at least one letter and can only include letters and numbers. No spaces, special characters, or only numbers allowed!');
       return;
     }
 
-    // Check if username already exists
     const usernameExists = await checkUsernameExists(username);
     if (usernameExists) {
       alert('Username already taken! Please choose a different username.');
@@ -175,13 +175,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
     try {
       const userCredential = await auth.createUserWithEmailAndPassword(email, password);
-      const user = userCredential.user; // Use the original user object
+      const user = userCredential.user;
       console.log('User registered:', user);
 
-      // Send verification email using the original user object
       await sendVerificationEmail(user);
 
-      // Save user data to the database
       await database.ref('users/' + user.uid).set({
         name: username,
         username,
@@ -195,7 +193,6 @@ document.addEventListener('DOMContentLoaded', () => {
         match: Math.floor(Math.random() * 100)
       });
 
-      // Sign out the user after registration to enforce email verification
       await auth.signOut();
       registerPopup.style.display = 'none';
       alert('Registration successful! Please check your email to verify your account.');
@@ -225,13 +222,11 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
-    // Validate username format
     if (!isValidUsername(newUsername)) {
       alert('Username must contain at least one letter and can only include letters and numbers. No spaces, special characters, or only numbers allowed!');
       return;
     }
 
-    // Check if the new username is different and already taken
     if (newUsername !== currentUser.username) {
       const usernameExists = await checkUsernameExists(newUsername);
       if (usernameExists) {
@@ -240,13 +235,11 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }
 
-    // Update user data in Firebase
     const updates = {};
     updates['users/' + currentUser.uid + '/username'] = newUsername;
     updates['users/' + currentUser.uid + '/bio'] = newBio;
     updates['users/' + currentUser.uid + '/avatar'] = `https://placehold.co/40/8a4af3/ffffff?text=${newUsername.charAt(0).toUpperCase()}`;
 
-    // Update all posts by this user with the new username
     const postsSnapshot = await database.ref('posts').once('value');
     postsSnapshot.forEach(childSnapshot => {
       const post = childSnapshot.val();
@@ -255,29 +248,26 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     });
 
-    // Update matches and friends with the new username
     const matchesRef = database.ref('matches/' + currentUser.uid);
-    matchesSnapshot = await matchesRef.once('value');
+    const matchesSnapshot = await matchesRef.once('value');
     matchesSnapshot.forEach(childSnapshot => {
       updates['matches/' + currentUser.uid + '/' + childSnapshot.key + '/username'] = newUsername;
     });
 
     const friendsRef = database.ref('friends/' + currentUser.uid);
-    friendsSnapshot = await friendsRef.once('value');
+    const friendsSnapshot = await friendsRef.once('value');
     friendsSnapshot.forEach(childSnapshot => {
       updates['friends/' + currentUser.uid + '/' + childSnapshot.key + '/username'] = newUsername;
     });
 
-    // Update friend requests
     const friendRequestsRef = database.ref('friend_requests/' + currentUser.uid);
-    friendRequestsSnapshot = await friendRequestsRef.once('value');
+    const friendRequestsSnapshot = await friendRequestsRef.once('value');
     friendRequestsSnapshot.forEach(childSnapshot => {
       updates['friend_requests/' + currentUser.uid + '/' + childSnapshot.key + '/username'] = newUsername;
     });
 
-    // Update other users' matches and friends
     const allUsersRef = database.ref('users');
-    allUsersSnapshot = await allUsersRef.once('value');
+    const allUsersSnapshot = await allUsersRef.once('value');
     allUsersSnapshot.forEach(userSnapshot => {
       const userId = userSnapshot.key;
       if (userId !== currentUser.uid) {
@@ -290,14 +280,13 @@ document.addEventListener('DOMContentLoaded', () => {
       alert('Profile updated successfully!');
       fetchUserProfile(currentUser.uid);
       profilePopup.style.display = 'none';
-      // Update currentUser object
       currentUser.username = newUsername;
       currentUser.bio = newBio;
-      // Refresh other sections to reflect the new username
       fetchPosts();
       fetchMatches();
       fetchFriends();
       fetchFriendRequests();
+      fetchChatUsers(); // Refresh chat users in case username changed
     }).catch(error => {
       console.error('Error updating profile:', error);
       alert('Failed to update profile. Please try again.');
@@ -309,6 +298,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (currentChatUser && chatInput.value.trim()) {
       sendMessage(chatInput.value);
       chatInput.value = '';
+      fetchChatUsers(); // Refresh chat users list after sending a message
     }
   });
 
@@ -327,6 +317,7 @@ document.addEventListener('DOMContentLoaded', () => {
       reader.onload = (event) => sendMessage(`<img src="${event.target.result}" alt="Image" style="max-width: 200px;">`);
       reader.readAsDataURL(file);
       fileInput.value = '';
+      fetchChatUsers(); // Refresh chat users list after sending an image
     }
   });
 
@@ -345,22 +336,65 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   searchBtn.addEventListener('click', () => {
-    const query = usernameSearch.value.toLowerCase();
+    const query = usernameSearch.value.toLowerCase().trim();
     console.log('Search query:', query);
-    if (query) {
-      const filteredProfiles = profiles.filter(profile => profile.username.toLowerCase().includes(query));
-      console.log('Filtered profiles:', filteredProfiles);
-      displayFilteredCards(filteredProfiles);
+    if (!query) {
+      matchCards.innerHTML = `
+        <h2>Find Your Weird</h2>
+        <div class="search-bar">
+          <input type="text" id="username-search" placeholder="Search by username..." />
+          <button id="search-btn"><i class="fas fa-search"></i></button>
+        </div>
+        <div class="filters">
+          <select id="match-filter">
+            <option value="all">All</option>
+            <option value="tags">By Tags</option>
+            <option value="likes">By Likes</option>
+            <option value="match">By Match %</option>
+          </select>
+          <select id="match-sort">
+            <option value="none">Sort By</option>
+            <option value="match-desc">Match % (High to Low)</option>
+            <option value="match-asc">Match % (Low to High)</option>
+            <option value="username">Username (A-Z)</option>
+          </select>
+        </div>
+        <p>Please enter a username to search for users.</p>
+      `;
+      // Reattach event listeners for the search bar and filters
+      const newSearchBtn = document.getElementById('search-btn');
+      newSearchBtn.addEventListener('click', () => {
+        const query = document.getElementById('username-search').value.toLowerCase().trim();
+        console.log('Search query:', query);
+        if (query) {
+          const filteredProfiles = profiles.filter(profile => 
+            profile.username.toLowerCase().includes(query) &&
+            profile.id !== currentUser?.uid
+          );
+          console.log('Filtered profiles:', filteredProfiles);
+          displayFilteredCards(filteredProfiles);
+        }
+      });
+      document.getElementById('match-filter').addEventListener('change', filterProfiles);
+      document.getElementById('match-sort').addEventListener('change', sortProfiles);
+      return;
     }
+    const filteredProfiles = profiles.filter(profile => 
+      profile.username.toLowerCase().includes(query) &&
+      profile.id !== currentUser?.uid
+    );
+    console.log('Filtered profiles:', filteredProfiles);
+    displayFilteredCards(filteredProfiles);
   });
 
   matchFilter.addEventListener('change', filterProfiles);
   matchSort.addEventListener('change', sortProfiles);
 
   backBtn.addEventListener('click', () => {
-    switchSection('match-feed');
+    switchSection('chats'); // Go back to Chats section
     currentChatUser = null;
     chatList.innerHTML = '<p>Select a match or friend to chat!</p>';
+    chatHeader.textContent = 'Chat with Anonymous'; // Reset header
   });
 
   clearChatBtn.addEventListener('click', () => {
@@ -368,13 +402,20 @@ document.addEventListener('DOMContentLoaded', () => {
       const chatId = generateChatId(currentUser.uid, currentChatUser.id);
       database.ref('messages/' + chatId).remove();
       chatList.innerHTML = '<p>Chat cleared!</p>';
+      fetchChatUsers(); // Refresh chat users list after clearing
     }
   });
 
   chatInput.addEventListener('input', () => {
     if (currentChatUser && chatInput.value.trim()) {
-      typingIndicator.textContent = 'Typing...';
-      setTimeout(() => { typingIndicator.textContent = ''; }, 2000);
+      typingIndicator.textContent = 'Typing...'; // Set initial text
+      typingIndicator.classList.add('active'); // Show the indicator
+      clearTimeout(typingIndicator.timeout); // Clear any existing timeout
+      typingIndicator.timeout = setTimeout(() => {
+        typingIndicator.classList.remove('active'); // Hide the indicator after 2 seconds
+      }, 2000);
+    } else {
+      typingIndicator.classList.remove('active'); // Hide if no input or no chat user
     }
   });
 
@@ -406,7 +447,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const removeBtn = e.target.closest('.remove-match-btn');
     const matchElement = e.target.closest('.match');
     const match = matches.find(m => m.username === matchElement.querySelector('h3').textContent);
-    if (match) {
+    if (match && match.id !== currentUser?.uid) { // Prevent self-interaction
       if (friendRequestBtn) {
         sendFriendRequest(match.id);
       } else if (chatBtn) {
@@ -414,6 +455,8 @@ document.addEventListener('DOMContentLoaded', () => {
       } else if (removeBtn) {
         removeFromMatches(match.id);
       }
+    } else if (match && match.id === currentUser?.uid) {
+      alert('You cannot interact with yourself!');
     }
   });
 
@@ -425,7 +468,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const rejectBtn = e.target.closest('.reject-btn');
     if (chatBtn) {
       const friend = friends.find(f => f.username === e.target.closest('.friend').querySelector('h3').textContent);
-      if (friend) startChat(friend);
+      if (friend && friend.id !== currentUser?.uid) { // Prevent self-interaction
+        startChat(friend);
+      } else if (friend && friend.id === currentUser?.uid) {
+        alert('You cannot chat with yourself!');
+      }
     } else if (removeBtn) {
       const friend = friends.find(f => f.username === e.target.closest('.friend').querySelector('h3').textContent);
       if (friend) removeFriend(friend.id);
@@ -435,6 +482,21 @@ document.addEventListener('DOMContentLoaded', () => {
     } else if (rejectBtn) {
       const requestId = rejectBtn.getAttribute('data-request-id');
       rejectFriendRequest(requestId);
+    }
+  });
+
+  // Event delegation for Chats section
+  chatUsersContainer.addEventListener('click', (e) => {
+    const chatUserElement = e.target.closest('.chat-user');
+    if (chatUserElement) {
+      const userId = chatUserElement.getAttribute('data-user-id');
+      const username = chatUserElement.querySelector('h3').textContent;
+      const user = { id: userId, username };
+      if (user.id !== currentUser?.uid) { // Prevent self-interaction
+        startChat(user);
+      } else {
+        alert('You cannot chat with yourself!');
+      }
     }
   });
 
@@ -547,7 +609,9 @@ function handleAuthAction() {
       thoughtsFeedContent.innerHTML = '';
       matchesSection.innerHTML = '<h2>Your Matches</h2>';
       friendsSection.innerHTML = '<h2>Your Friends</h2>';
+      chatUsersContainer.innerHTML = '<p>Please log in to view your chats.</p>';
       chatList.innerHTML = '<p>Select a match or friend to chat!</p>';
+      chatHeader.textContent = 'Chat with Anonymous';
       clearProfileSection();
     }).catch(error => alert(error.message));
   }
@@ -558,7 +622,6 @@ function switchSection(sectionId) {
   document.getElementById(sectionId).classList.add('active');
   currentSection = sectionId;
 
-  // Reset Weird Feed tab to "Posts" when switching to Weird Feed
   if (sectionId === 'weird-feed') {
     currentWeirdFeedTab = 'posts';
     document.querySelectorAll('.weird-feed .toggle-btn').forEach(btn => btn.classList.remove('active'));
@@ -590,11 +653,10 @@ function fetchUserProfile(uid) {
         console.warn('Failed to load avatar, using fallback image');
         userAvatar.src = 'https://placehold.co/40/8a4af3/ffffff?text=U';
       };
-      // Update the My Profile section
       profileName.textContent = userData.name;
       profileUsername.textContent = userData.username;
       profileBio.textContent = userData.bio || 'No bio provided.';
-      userAvatar.src = userData.avatar; // Update avatar in the My Profile section
+      userAvatar.src = userData.avatar;
     } else {
       console.warn('No user data found for UID:', uid);
       clearProfileSection();
@@ -610,26 +672,36 @@ function clearProfileSection() {
 }
 
 function fetchProfiles() {
+  if (!currentUser) {
+    console.warn('Cannot fetch profiles: No current user:', currentUser);
+    matchCards.innerHTML = '<p>Please log in to view profiles.</p>';
+    return;
+  }
+
+  // Add a loading state
+  matchCards.innerHTML = '<p>Loading profiles...</p>';
+
+  profiles = [];
   database.ref('users').once('value', snapshot => {
-    profiles = [];
     if (!snapshot.exists()) {
       console.log('No profiles found in the database.');
-      displayInitialSearchUI();
+      matchCards.innerHTML = '<p>No profiles available.</p>';
       return;
     }
     snapshot.forEach(childSnapshot => {
       const user = childSnapshot.val();
       user.id = childSnapshot.key;
-      if (user.id !== currentUser?.id && !matches.some(m => m.id === user.id) && !friends.some(f => f.id === user.id)) {
+      if (user.id !== currentUser.id) { // Only exclude the current user
         profiles.push(user);
       }
     });
     console.log('Fetched profiles:', profiles);
+
+    // Set up the search UI without rendering profiles
     displayInitialSearchUI();
   }, error => {
     console.error('Error fetching profiles:', error);
-    alert('Failed to fetch profiles. Please check your connection and try again.');
-    displayInitialSearchUI();
+    matchCards.innerHTML = '<p>Error loading profiles. Please try again later.</p>';
   });
 }
 
@@ -741,6 +813,56 @@ function fetchFriendRequests() {
   }, error => console.error('Error fetching friend requests:', error));
 }
 
+function fetchChatUsers() {
+  if (!currentUser || !currentUser.uid) {
+    console.warn('Cannot fetch chat users: currentUser or uid is missing:', currentUser);
+    return;
+  }
+  database.ref('messages').once('value', snapshot => {
+    chatUsers = [];
+    const userIds = new Set();
+    snapshot.forEach(childSnapshot => {
+      const chatId = childSnapshot.key;
+      const participants = chatId.split('_');
+      const otherUserId = participants[0] === currentUser.uid ? participants[1] : participants[0];
+      if (participants.includes(currentUser.uid) && otherUserId !== currentUser.uid && !userIds.has(otherUserId)) { // Prevent self-interaction
+        userIds.add(otherUserId);
+        // Fetch user data for the other user
+        database.ref('users/' + otherUserId).once('value').then(userSnapshot => {
+          const userData = userSnapshot.val();
+          if (userData) {
+            chatUsers.push({ id: otherUserId, username: userData.username });
+          }
+          renderChatUsers();
+        });
+      }
+    });
+    if (chatUsers.length === 0) {
+      chatUsersContainer.innerHTML = '<p>No chats yet. Start a conversation from Matches or Friends!</p>';
+    }
+  }, error => {
+    console.error('Error fetching chat users:', error);
+    chatUsersContainer.innerHTML = '<p>Error loading chats. Please try again.</p>';
+  });
+}
+
+function renderChatUsers() {
+  chatUsersContainer.innerHTML = '';
+  chatUsers.forEach(user => {
+    const chatUserElement = document.createElement('div');
+    chatUserElement.className = 'chat-user';
+    chatUserElement.setAttribute('data-user-id', user.id);
+    chatUserElement.innerHTML = `
+      <h3>${user.username}</h3>
+      <p>Click to view chat</p>
+    `;
+    chatUsersContainer.appendChild(chatUserElement);
+  });
+  if (chatUsers.length === 0) {
+    chatUsersContainer.innerHTML = '<p>No chats yet. Start a conversation from Matches or Friends!</p>';
+  }
+}
+
 function displayInitialSearchUI() {
   matchCards.innerHTML = `
     <h2>Find Your Weird</h2>
@@ -762,16 +884,23 @@ function displayInitialSearchUI() {
         <option value="username">Username (A-Z)</option>
       </select>
     </div>
+    <p>Search for users...</p>
   `;
-  document.getElementById('search-btn').addEventListener('click', () => {
-    const query = document.getElementById('username-search').value.toLowerCase();
+
+  const searchBtn = document.getElementById('search-btn');
+  searchBtn.addEventListener('click', () => {
+    const query = document.getElementById('username-search').value.toLowerCase().trim();
     console.log('Search query:', query);
     if (query) {
-      const filteredProfiles = profiles.filter(profile => profile.username.toLowerCase().includes(query));
+      const filteredProfiles = profiles.filter(profile => 
+        profile.username.toLowerCase().includes(query) &&
+        profile.id !== currentUser?.uid
+      );
       console.log('Filtered profiles:', filteredProfiles);
       displayFilteredCards(filteredProfiles);
     }
   });
+
   document.getElementById('match-filter').addEventListener('change', filterProfiles);
   document.getElementById('match-sort').addEventListener('change', sortProfiles);
 }
@@ -802,6 +931,7 @@ function displayFilteredCards(filteredProfiles) {
     matchCards.innerHTML += '<p>No matching profiles found.</p>';
   } else {
     filteredProfiles.forEach(profile => {
+      const isFriend = friends.some(f => f.id === profile.id);
       const card = document.createElement('div');
       card.className = 'card';
       card.innerHTML = `
@@ -812,17 +942,21 @@ function displayFilteredCards(filteredProfiles) {
         <div class="buttons">
           <button class="yes-btn">Yes</button>
           <button class="no-btn">No</button>
-          <button class="friend-request-btn">Send Friend Request</button>
+          <button class="friend-request-btn" ${isFriend ? 'disabled' : ''}>${isFriend ? 'Already Friends' : 'Send Friend Request'}</button>
         </div>
       `;
       matchCards.appendChild(card);
     });
   }
-  document.getElementById('search-btn').addEventListener('click', () => {
-    const query = document.getElementById('username-search').value.toLowerCase();
+  const searchBtn = document.getElementById('search-btn');
+  searchBtn.addEventListener('click', () => {
+    const query = document.getElementById('username-search').value.toLowerCase().trim();
     console.log('Search query:', query);
     if (query) {
-      const filteredProfiles = profiles.filter(profile => profile.username.toLowerCase().includes(query));
+      const filteredProfiles = profiles.filter(profile => 
+        profile.username.toLowerCase().includes(query) &&
+        profile.id !== currentUser?.uid
+      );
       console.log('Filtered profiles:', filteredProfiles);
       displayFilteredCards(filteredProfiles);
     }
@@ -1069,6 +1203,12 @@ function sendFriendRequest(friendId) {
     return;
   }
 
+  if (friendId === currentUser.uid) {
+    console.warn('Cannot send friend request to self:', friendId);
+    alert('You cannot send a friend request to yourself!');
+    return;
+  }
+
   const isAlreadyFriend = friends.some(friend => friend.id === friendId);
   if (isAlreadyFriend) {
     console.warn('User is already a friend:', friendId);
@@ -1148,7 +1288,20 @@ function generateChatId(uid1, uid2) {
 }
 
 function startChat(user) {
+  if (!currentUser || !currentUser.uid || !user || !user.id) {
+    console.error('Cannot start chat: No current user or user ID:', { currentUser, user });
+    alert('Please log in and select a chat partner.');
+    return;
+  }
+
+  if (user.id === currentUser.uid) {
+    console.warn('Cannot start chat with self:', user.id);
+    alert('You cannot chat with yourself!');
+    return;
+  }
+
   currentChatUser = user;
+  chatHeader.textContent = `Chat with ${user.username}`; // Update header with username
   switchSection('chat-section');
   chatList.innerHTML = '';
   const chatId = generateChatId(currentUser.uid, user.id);
@@ -1176,6 +1329,11 @@ function sendMessage(content) {
     alert('Please log in and select a chat partner.');
     return;
   }
+  if (currentChatUser.id === currentUser.uid) {
+    console.warn('Cannot send message to self:', currentChatUser.id);
+    alert('You cannot send messages to yourself!');
+    return;
+  }
   const chatId = generateChatId(currentUser.uid, currentChatUser.id);
   const message = {
     content,
@@ -1185,5 +1343,6 @@ function sendMessage(content) {
   };
   database.ref('messages/' + chatId).push(message).then(() => {
     console.log('Message sent:', message);
+    typingIndicator.classList.remove('active'); // Hide typing indicator after sending
   }).catch(error => console.error('Error sending message:', error));
 }

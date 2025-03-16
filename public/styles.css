@@ -183,7 +183,8 @@ section.active {
 .matches,
 .friends,
 .chat-section,
-.my-profile {
+.my-profile,
+.chats {
   overflow-y: auto;
   display: none;
 }
@@ -194,7 +195,8 @@ section.active {
 .matches.active,
 .friends.active,
 .chat-section.active,
-.my-profile.active {
+.my-profile.active,
+.chats.active {
   display: block;
 }
 
@@ -269,7 +271,8 @@ select:focus {
 .match,
 .friend,
 .friend-request,
-.profile-container {
+.profile-container,
+.chat-user {
   background: var(--card-bg);
   padding: 15px;
   margin-bottom: 15px;
@@ -283,7 +286,8 @@ select:focus {
 .match:hover,
 .friend:hover,
 .friend-request:hover,
-.profile-container:hover {
+.profile-container:hover,
+.chat-user:hover {
   transform: translateY(-5px);
 }
 
@@ -606,6 +610,9 @@ textarea {
   margin: 0;
   flex-grow: 1;
   text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* Back Button */
@@ -772,12 +779,13 @@ textarea {
   padding: 10px;
   text-align: center;
   font-size: 14px;
-  opacity: 0;
-  transition: opacity 0.3s ease-in-out;
+  min-height: 20px; /* Reserve space */
+  visibility: hidden; /* Hide without affecting layout */
+  transition: visibility 0.3s ease-in-out;
 }
 
 #typing-indicator.active {
-  opacity: 1;
+  visibility: visible; /* Show when active */
 }
 
 /* Clear Chat Button */
@@ -825,6 +833,7 @@ textarea {
   border: 1px solid #8a4af3;
   margin-bottom: 10px;
   box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+  min-height: 50px; /* Ensure a stable height */
 }
 
 /* File Button */
@@ -1006,6 +1015,34 @@ emoji-picker {
   text-decoration: underline;
 }
 
+/* Chats Section */
+.chats {
+  padding: 20px;
+}
+
+.chat-users {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.chat-user {
+  cursor: pointer;
+}
+
+.chat-user h3 {
+  margin: 0;
+  font-size: 1.1em;
+  color: var(--chat-text);
+}
+
+.chat-user p {
+  margin: 5px 0 0;
+  font-size: 0.9em;
+  color: var(--chat-text);
+  opacity: 0.7;
+}
+
 /* Animations */
 @keyframes fadeIn {
   from { opacity: 0; }
@@ -1032,6 +1069,7 @@ emoji-picker {
   text-decoration: underline;
   cursor: pointer;
 }
+
 #resend-verification:hover {
   color: #6a3db8;
 }

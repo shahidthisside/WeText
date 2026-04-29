@@ -1,42 +1,20 @@
 # Wastext - Modern Social Media Platform
 
-<div align="center">
-
-![Wastext Logo](https://via.placeholder.com/200x80/4F46E5/FFFFFF?text=WASTEXT)
-
 **A feature-rich, real-time social media platform built with modern web technologies**
-
-[![React](https://img.shields.io/badge/React-18.0+-61DAFB?style=flat&logo=react&logoColor=white)](https://reactjs.org/)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-3178C6?style=flat&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
-[![Firebase](https://img.shields.io/badge/Firebase-9.0+-FFCA28?style=flat&logo=firebase&logoColor=black)](https://firebase.google.com/)
-[![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-3.0+-38B2AC?style=flat&logo=tailwind-css&logoColor=white)](https://tailwindcss.com/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-
-[Live Demo](https://your-demo-url.com) • [Documentation](https://github.com/yourusername/wastext-v2/wiki) • [Report Bug](https://github.com/yourusername/wastext-v2/issues) • [Request Feature](https://github.com/yourusername/wastext-v2/issues)
-
-</div>
 
 ## Table of Contents
 
 - [Overview](#overview)
 - [Features](#features)
 - [Tech Stack](#tech-stack)
-- [Screenshots](#screenshots)
 - [Getting Started](#getting-started)
   - [Prerequisites](#prerequisites)
   - [Installation](#installation)
   - [Configuration](#configuration)
 - [Usage](#usage)
 - [API Documentation](#api-documentation)
-- [Contributing](#contributing)
-- [Testing](#testing)
 - [Deployment](#deployment)
 - [Security](#security)
-- [Performance](#performance)
-- [Roadmap](#roadmap)
-- [License](#license)
-- [Support](#support)
-- [Acknowledgments](#acknowledgments)
 
 ## Overview
 
@@ -103,24 +81,6 @@ Wastext is a modern, full-stack social media platform that enables users to conn
 - **Package Manager**: npm
 - **Deployment**: Ready for Vercel, Netlify, or Firebase Hosting
 
-## Screenshots
-
-<div align="center">
-
-### Landing Page
-![Landing Page](https://via.placeholder.com/800x400/4F46E5/FFFFFF?text=Landing+Page)
-
-### Dashboard
-![Dashboard](https://via.placeholder.com/800x400/10B981/FFFFFF?text=Dashboard)
-
-### Real-time Chat
-![Chat Interface](https://via.placeholder.com/800x400/F59E0B/FFFFFF?text=Chat+Interface)
-
-### User Profiles
-![User Profile](https://via.placeholder.com/800x400/EF4444/FFFFFF?text=User+Profile)
-
-</div>
-
 ## Getting Started
 
 ### Prerequisites
@@ -136,8 +96,8 @@ Before you begin, ensure you have the following installed:
 
 1. **Clone the repository**
    ```bash
-   git clone https://github.com/yourusername/wastext-v2.git
-   cd wastext-v2
+   git clone https://github.com/shahidthisside/wastext.git
+   cd wastext
    ```
 
 2. **Install frontend dependencies**
@@ -198,14 +158,42 @@ Before you begin, ensure you have the following installed:
 
 3. **Firestore Security Rules**
    
-   Copy the rules from `FIRESTORE-RULES.md` and apply them in your Firebase Console:
-   - Go to Firestore Database → Rules
-   - Replace the default rules with the provided rules
-   - Publish the changes
+   Apply these rules in your Firebase Console (Firestore Database → Rules):
+   ```javascript
+   rules_version = '2';
+   service cloud.firestore {
+     match /databases/{database}/documents {
+       match /users/{userId} {
+         allow read: if request.auth != null;
+         allow write: if request.auth != null && request.auth.uid == userId;
+       }
+       match /posts/{postId} {
+         allow read: if request.auth != null;
+         allow create: if request.auth != null && request.auth.uid == request.resource.data.authorId;
+         allow update: if request.auth != null;
+       }
+       match /messages/{messageId} {
+         allow read, write: if request.auth != null && (
+           request.auth.uid == resource.data.senderId ||
+           request.auth.uid == resource.data.receiverId
+         );
+       }
+       match /friendRequests/{requestId} {
+         allow read, write: if request.auth != null;
+       }
+       match /friendships/{friendshipId} {
+         allow read, write: if request.auth != null;
+       }
+     }
+   }
+   ```
 
 4. **Create Required Indexes**
    
-   Follow the index creation guide in `FIRESTORE-RULES.md` to create the necessary composite indexes.
+   Create these composite indexes in Firebase Console (Firestore → Indexes):
+   - **messages**: `senderId` (Ascending), `createdAt` (Ascending)
+   - **messages**: `receiverId` (Ascending), `createdAt` (Ascending)
+   - **friendRequests**: `receiverId` (Ascending), `status` (Ascending), `createdAt` (Descending)
 
 ### Running the Application
 
@@ -285,65 +273,22 @@ POST   /api/messages
 PUT    /api/messages/:id/read
 ```
 
-For detailed API documentation, visit our [API Documentation](https://github.com/yourusername/wastext-v2/wiki/API-Documentation).
-
-## Contributing
-
-We welcome contributions from the community! Please read our [Contributing Guidelines](CONTRIBUTING.md) before submitting pull requests.
-
-### Development Process
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Make your changes
-4. Add tests if applicable
-5. Commit your changes (`git commit -m 'Add some amazing feature'`)
-6. Push to the branch (`git push origin feature/amazing-feature`)
-7. Open a Pull Request
-
-### Code Style
-
-- Follow TypeScript best practices
-- Use ESLint configuration provided
-- Write meaningful commit messages
-- Add comments for complex logic
-- Ensure responsive design principles
-
-## Testing
-
-```bash
-# Run frontend tests
-npm test
-
-# Run backend tests
-cd server-simple
-npm test
-
-# Run end-to-end tests
-npm run test:e2e
-
-# Generate coverage report
-npm run test:coverage
-```
-
 ## Deployment
 
-### Frontend Deployment (Vercel)
+For detailed deployment instructions, see the [Deployment Guide](DEPLOYMENT.md).
 
+### Quick Deploy Options
+
+#### Frontend (Vercel)
 1. Connect your GitHub repository to Vercel
 2. Set environment variables in Vercel dashboard
 3. Deploy automatically on push to main branch
 
-### Backend Deployment (Railway/Render)
-
-1. Create a new service on Railway or Render
+#### Backend (Railway)
+1. Create a new service on Railway
 2. Connect your GitHub repository
 3. Set environment variables
 4. Deploy the `server-simple` directory
-
-### Full Stack Deployment
-
-For detailed deployment instructions, see our [Deployment Guide](DEPLOYMENT.md).
 
 ## Security
 
@@ -354,72 +299,6 @@ For detailed deployment instructions, see our [Deployment Guide](DEPLOYMENT.md).
 - **HTTPS**: All communications encrypted
 - **Rate Limiting**: API rate limiting implemented
 
-For security concerns, please email security@wastext.com
-
-## Performance
-
-- **Lighthouse Score**: 95+ (Performance, Accessibility, Best Practices, SEO)
-- **Bundle Size**: Optimized with Vite and code splitting
-- **Real-time Updates**: Efficient Firebase listeners
-- **Caching**: Intelligent caching strategies
-- **Image Optimization**: Lazy loading and compression
-
-## Roadmap
-
-### Version 2.1 (Q2 2024)
-- [ ] Voice messages in chat
-- [ ] Group chat functionality
-- [ ] Advanced search filters
-- [ ] Push notifications
-
-### Version 2.2 (Q3 2024)
-- [ ] Video calling integration
-- [ ] Story features
-- [ ] Advanced analytics dashboard
-- [ ] Mobile app (React Native)
-
-### Version 3.0 (Q4 2024)
-- [ ] AI-powered content recommendations
-- [ ] Advanced matching algorithms
-- [ ] Monetization features
-- [ ] Multi-language support
-
-See the [open issues](https://github.com/yourusername/wastext-v2/issues) for a full list of proposed features and known issues.
-
-## License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## Support
-
-### Getting Help
-
-- **Documentation**: Check our [Wiki](https://github.com/yourusername/wastext-v2/wiki)
-- **Issues**: Report bugs or request features via [GitHub Issues](https://github.com/yourusername/wastext-v2/issues)
-- **Discussions**: Join community discussions in [GitHub Discussions](https://github.com/yourusername/wastext-v2/discussions)
-- **Email**: Contact us at support@wastext.com
-
-### Community
-
-- **Discord**: [Join our Discord server](https://discord.gg/wastext)
-- **Twitter**: [@WastextApp](https://twitter.com/wastextapp)
-- **LinkedIn**: [Wastext Company Page](https://linkedin.com/company/wastext)
-
-## Acknowledgments
-
-- **Firebase** for providing excellent backend services
-- **React Team** for the amazing frontend framework
-- **Tailwind CSS** for the utility-first CSS framework
-- **Heroicons** for beautiful icons
-- **Framer Motion** for smooth animations
-- **Open Source Community** for inspiration and contributions
-
 ---
 
-<div align="center">
-
-**Built with ❤️ by the Wastext Team**
-
-[Website](https://wastext.com) • [Blog](https://blog.wastext.com) • [Twitter](https://twitter.com/wastextapp) • [LinkedIn](https://linkedin.com/company/wastext)
-
-</div>
+**Developed by [shahidthisside](https://github.com/shahidthisside)**

@@ -13,11 +13,9 @@ This guide covers deploying Wastext to various platforms for production use.
 - [Backend Deployment](#backend-deployment)
   - [Railway](#railway)
   - [Render](#render)
-  - [Google Cloud Run](#google-cloud-run)
 - [Database Setup](#database-setup)
 - [Domain Configuration](#domain-configuration)
 - [SSL/HTTPS Setup](#sslhttps-setup)
-- [Monitoring and Analytics](#monitoring-and-analytics)
 
 ## Prerequisites
 
@@ -176,39 +174,16 @@ PORT=5002
    - Click "Create Web Service"
    - Note the generated URL
 
-### Google Cloud Run
-
-1. **Build Docker Image**
-   Create `server-simple/Dockerfile`:
-   ```dockerfile
-   FROM node:18-alpine
-   WORKDIR /app
-   COPY package*.json ./
-   RUN npm ci --only=production
-   COPY . .
-   EXPOSE 5002
-   CMD ["node", "index-firebase.js"]
-   ```
-
-2. **Deploy to Cloud Run**
-   ```bash
-   gcloud run deploy wastext-backend \
-     --source ./server-simple \
-     --platform managed \
-     --region us-central1 \
-     --allow-unauthenticated
-   ```
-
 ## Database Setup
 
 ### Firestore Configuration
 
 1. **Security Rules**
-   - Copy rules from `FIRESTORE-RULES.md`
-   - Apply in Firebase Console → Firestore → Rules
+   - Apply the rules provided in the main README
+   - Go to Firebase Console → Firestore → Rules
 
 2. **Indexes**
-   - Create composite indexes as specified in `FIRESTORE-RULES.md`
+   - Create composite indexes as specified in the main README
    - Wait for indexes to build (5-10 minutes)
 
 3. **Backup Strategy**
@@ -245,48 +220,6 @@ Most modern hosting platforms provide automatic SSL certificates. Ensure:
 - Mixed content warnings are resolved
 - CORS is configured for HTTPS origins
 
-## Monitoring and Analytics
-
-### Error Tracking
-
-1. **Sentry Integration**
-   ```bash
-   npm install @sentry/react @sentry/node
-   ```
-
-2. **Configure Frontend**
-   ```typescript
-   import * as Sentry from "@sentry/react";
-   
-   Sentry.init({
-     dsn: "YOUR_SENTRY_DSN",
-     environment: "production",
-   });
-   ```
-
-### Performance Monitoring
-
-1. **Google Analytics**
-   - Add GA4 tracking code
-   - Configure conversion events
-
-2. **Web Vitals**
-   - Monitor Core Web Vitals
-   - Set up performance alerts
-
-### Uptime Monitoring
-
-1. **UptimeRobot**
-   - Monitor frontend and backend endpoints
-   - Set up alert notifications
-
-2. **Health Check Endpoints**
-   ```javascript
-   app.get('/health', (req, res) => {
-     res.status(200).json({ status: 'OK', timestamp: new Date().toISOString() });
-   });
-   ```
-
 ## Post-Deployment Checklist
 
 - [ ] Frontend loads correctly
@@ -295,10 +228,7 @@ Most modern hosting platforms provide automatic SSL certificates. Ensure:
 - [ ] Real-time features function
 - [ ] Database operations work
 - [ ] SSL certificates are active
-- [ ] Custom domains resolve
-- [ ] Error tracking is configured
-- [ ] Monitoring is set up
-- [ ] Backup systems are active
+- [ ] Custom domains resolve (if applicable)
 
 ## Troubleshooting
 
@@ -320,8 +250,6 @@ Most modern hosting platforms provide automatic SSL certificates. Ensure:
    - Verify Firebase credentials
    - Check Firestore security rules
 
-For additional help, check our [troubleshooting guide](https://github.com/yourusername/wastext-v2/wiki/Troubleshooting) or create an issue.
-
 ## Security Considerations
 
 - Use environment variables for all secrets
@@ -331,4 +259,4 @@ For additional help, check our [troubleshooting guide](https://github.com/yourus
 - Monitor for security vulnerabilities
 - Keep dependencies updated
 
-Your Wastext application is now ready for production! 🚀
+Your Wastext application is now ready for production!

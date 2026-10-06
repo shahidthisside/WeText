@@ -1,50 +1,23 @@
 {
-  "name": "wastext-v2",
-  "version": "2.0.0",
-  "description": "Modern social platform connecting users through shared thoughts and interests",
-  "type": "module",
+  "name": "wetext",
+  "private": true,
+  "version": "1.0.0",
+  "description": "WeText — share thoughts, find your people, talk in real time.",
+  "workspaces": [
+    "apps/*"
+  ],
   "scripts": {
-    "dev": "concurrently \"npm run server:dev\" \"npm run client:dev\"",
-    "server:dev": "nodemon --exec node --loader ts-node/esm server/src/index.ts",
-    "client:dev": "vite",
-    "build": "npm run client:build && npm run server:build",
-    "client:build": "tsc && vite build",
-    "server:build": "tsc -p server/tsconfig.json",
-    "start": "node server/dist/index.js",
-    "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
-    "preview": "vite preview"
-  },
-  "dependencies": {
-    "@headlessui/react": "^1.7.17",
-    "@heroicons/react": "^2.0.18",
-    "@tailwindcss/line-clamp": "^0.4.4",
-    "axios": "^1.6.2",
-    "clsx": "^2.0.0",
-    "firebase": "^12.12.1",
-    "framer-motion": "^10.16.16",
-    "lucide-react": "^0.294.0",
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0",
-    "react-hot-toast": "^2.4.1",
-    "react-router-dom": "^6.20.1",
-    "socket.io-client": "^4.7.4",
-    "tailwind-merge": "^2.0.0",
-    "zustand": "^4.5.7"
+    "dev": "concurrently -k -n server,web -c blue,green \"npm:dev -w @wetext/server\" \"npm:dev -w @wetext/web\"",
+    "build": "npm run build -w @wetext/web && npm run build -w @wetext/server",
+    "start": "npm run start -w @wetext/server",
+    "seed": "npm run seed -w @wetext/server",
+    "test": "npm run test -w @wetext/server",
+    "typecheck": "npm run typecheck -w @wetext/server && npm run typecheck -w @wetext/web"
   },
   "devDependencies": {
-    "@types/react": "^18.2.37",
-    "@types/react-dom": "^18.2.15",
-    "@typescript-eslint/eslint-plugin": "^6.10.0",
-    "@typescript-eslint/parser": "^6.10.0",
-    "@vitejs/plugin-react": "^4.1.1",
-    "autoprefixer": "^10.4.16",
-    "concurrently": "^8.2.2",
-    "eslint": "^8.53.0",
-    "eslint-plugin-react-hooks": "^4.6.0",
-    "eslint-plugin-react-refresh": "^0.4.4",
-    "postcss": "^8.4.32",
-    "tailwindcss": "^3.3.6",
-    "typescript": "^5.2.2",
-    "vite": "^5.0.0"
+    "concurrently": "10.0.5"
+  },
+  "engines": {
+    "node": ">=22"
   }
 }

@@ -77,6 +77,11 @@ export function Login() {
       <form onSubmit={submit} className="space-y-5" noValidate>
         <TextInput label="Username or email" value={login} onChange={(e) => setLogin(e.target.value)} autoComplete="username" autoFocus required />
         <PasswordInput value={password} onChange={setPassword} autoComplete="current-password" />
+        <p className="-mt-2 text-right text-[0.875rem]">
+          <Link to="/forgot-password" className="font-semibold text-accent hover:underline">
+            Forgot password?
+          </Link>
+        </p>
         {error && (
           <p role="alert" className="rounded-2xl bg-danger/10 px-4 py-2.5 text-[0.9375rem] text-danger">
             {error}
@@ -167,6 +172,121 @@ export function Signup() {
           Create account
         </Button>
       </form>
+    </AuthShell>
+  );
+}
+
+export function ForgotPassword() {
+  const [email, setEmail] = useState('');
+  const [sent, setSent] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      await api.post('/auth/forgot', { email });
+      setSent(true);
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <AuthShell
+      title={sent ? 'Check your email.' : 'Forgot your password?'}
+      sub={sent ? undefined : 'Enter the email you signed up with and we’ll send you a link to choose a new one.'}
+      footer={<>Remembered it? <Link to="/login" className="text-accent hover:underline">Sign in</Link></>}
+    >
+      {sent ? (
+        <div className="space-y-4 text-[1rem] text-fg-muted" role="status">
+          <p>
+            If there’s an account for <b className="text-fg">{email}</b>, a reset link is on its way. It works for 30 minutes.
+          </p>
+          <p>Nothing arrived? Check your spam folder, or wait a minute and try again.</p>
+          <Button variant="outline" onClick={() => setSent(false)}>
+            Use a different email
+          </Button>
+        </div>
+      ) : (
+        <form onSubmit={submit} className="space-y-5" noValidate>
+          <TextInput label="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" autoFocus required />
+          {error && (
+            <p role="alert" className="rounded-2xl bg-danger/10 px-4 py-2.5 text-[0.9375rem] text-danger">
+              {error}
+            </p>
+          )}
+          <Button type="submit" size="lg" variant="inverse" block loading={busy} disabled={!email.includes('@')}>
+            Send reset link
+          </Button>
+        </form>
+      )}
+    </AuthShell>
+  );
+}
+
+export function ResetPassword() {
+  const [params] = useSearchParams();
+  const token = params.get('token') ?? '';
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [done, setDone] = useState(false);
+
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      await api.post('/auth/reset-password', { token, password });
+      setDone(true);
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (!token) {
+    return (
+      <AuthShell title="This link isn’t valid." sub="Reset links come from the email we send. Request a new one to continue." footer={<Link to="/login" className="text-accent hover:underline">Back to sign in</Link>}>
+        <Link to="/forgot-password">
+          <Button size="lg" variant="inverse" block>Get a new link</Button>
+        </Link>
+      </AuthShell>
+    );
+  }
+
+  return (
+    <AuthShell
+      title={done ? 'Password changed.' : 'Choose a new password.'}
+      sub={done ? 'You’ve been signed out everywhere. Sign in with your new password.' : 'At least 8 characters, with a letter and a number.'}
+      footer={<Link to="/login" className="text-accent hover:underline">Back to sign in</Link>}
+    >
+      {done ? (
+        <Link to="/login">
+          <Button size="lg" variant="inverse" block>Sign in</Button>
+        </Link>
+      ) : (
+        <form onSubmit={submit} className="space-y-5" noValidate>
+          <PasswordInput label="New password" value={password} onChange={setPassword} autoComplete="new-password" />
+          {error && (
+            <p role="alert" className="rounded-2xl bg-danger/10 px-4 py-2.5 text-[0.9375rem] text-danger">
+              {error}{' '}
+              <Link to="/forgot-password" className="font-semibold underline">
+                Get a new link
+              </Link>
+            </p>
+          )}
+          <Button type="submit" size="lg" variant="inverse" block loading={busy} disabled={password.length < 8}>
+            Change password
+          </Button>
+        </form>
+      )}
     </AuthShell>
   );
 }

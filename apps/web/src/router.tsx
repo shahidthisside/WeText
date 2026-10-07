@@ -7,6 +7,8 @@ import { useMe } from './lib/auth';
 const Landing = lazy(() => import('./pages/Landing'));
 const Login = lazy(() => import('./pages/Auth').then((m) => ({ default: m.Login })));
 const Signup = lazy(() => import('./pages/Auth').then((m) => ({ default: m.Signup })));
+const ForgotPassword = lazy(() => import('./pages/Auth').then((m) => ({ default: m.ForgotPassword })));
+const ResetPassword = lazy(() => import('./pages/Auth').then((m) => ({ default: m.ResetPassword })));
 const Onboarding = lazy(() => import('./pages/Onboarding'));
 const Home = lazy(() => import('./pages/Home'));
 const PostPage = lazy(() => import('./pages/PostPage'));
@@ -65,6 +67,8 @@ export const router = createBrowserRouter([
       { path: '/', element: <GuestOnly><Landing /></GuestOnly> },
       { path: '/login', element: <GuestOnly><Login /></GuestOnly> },
       { path: '/signup', element: <GuestOnly><Signup /></GuestOnly> },
+      { path: '/forgot-password', element: <GuestOnly><ForgotPassword /></GuestOnly> },
+      { path: '/reset-password', element: <ResetPassword /> },
       { path: '/onboarding', element: <RequireAuth><Onboarding /></RequireAuth> },
       { path: '/about', element: <About /> },
       {

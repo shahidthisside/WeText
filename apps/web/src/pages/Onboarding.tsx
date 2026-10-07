@@ -9,6 +9,7 @@ import { api, errorMessage } from '../lib/api';
 import { setMe, useAuthedMe } from '../lib/auth';
 import type { Match, Me } from '../lib/types';
 import { cn } from '../lib/utils';
+import { InviteButton } from '../components/Invite';
 
 const STEPS = ['Profile', 'Interests', 'Personality', 'People'] as const;
 
@@ -135,6 +136,16 @@ function SuggestedPeople() {
       <div className="-mx-8 mt-6">
         {q.isPending ? (
           <PageSpinner />
+        ) : !q.data?.matches.length ? (
+          <div className="mx-8 rounded-[22px] border border-dashed border-line-strong px-5 py-6 text-center">
+            <p className="font-display text-[1.0625rem] font-bold">You’re one of the first here</p>
+            <p className="mx-auto mt-1 max-w-[36ch] text-[0.9375rem] text-fg-muted">
+              As more people join, the ones who match your interests will show up in Connect. For now, write your first note, or bring a friend along.
+            </p>
+            <div className="mt-4 flex justify-center">
+              <InviteButton variant="outline" />
+            </div>
+          </div>
         ) : (
           q.data?.matches.slice(0, 8).map((m) => (
             <div key={m.user.id} className="flex items-start gap-3 px-8 py-3">

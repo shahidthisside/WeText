@@ -13,10 +13,13 @@
 ![Fastify](https://img.shields.io/badge/fastify-5-000000)
 ![libSQL](https://img.shields.io/badge/sqlite%2FTurso-FTS5-003b57)
 ![Tests](https://img.shields.io/badge/tests-45%20passing-2ea44f)
+[![License: Proprietary](https://img.shields.io/badge/license-proprietary-red)](LICENSE)
 
 [Live site](https://wetextapp.onrender.com) · [Features](#features) · [Quick start](#quick-start) · [Architecture](#architecture) · [API](#api-overview) · [Security](#security) · [Deployment](#deployment)
 
 </div>
+
+> **Proprietary software. All rights reserved.** The source code is published so it can be read. It may not be copied, modified, renamed, re-skinned, built, hosted, redistributed, or used to train or prompt AI models. See [LICENSE](LICENSE).
 
 ---
 
@@ -91,6 +94,8 @@ The app keeps **no state on the server**. Accounts, posts, messages and photos a
 | Fonts | Bricolage Grotesque, Geist and Instrument Serif, bundled locally with Fontsource |
 
 ## Quick start
+
+> These instructions are for the author and for people with written permission. See [License](#license).
 
 **Prerequisites:** Node.js 22 or newer, and npm.
 
@@ -227,6 +232,8 @@ Test files share one database on a server, so run one file per fresh server.
 
 ## Deployment
 
+> These instructions are for the author and for people with written permission. See [License](#license).
+
 WeText keeps **no state on the server**: users, posts, messages and photos all live in the database. The app can therefore run on a free host that sleeps, restarts or wipes its disk, as long as the database is hosted somewhere durable. The setup below costs nothing and needs no credit card:
 
 | Piece | Service | Role |
@@ -325,8 +332,12 @@ Put it behind an HTTPS reverse proxy: production cookies are `Secure`, so plain 
 
 ## Contributing
 
-Issues and pull requests are welcome. Before opening a PR, run `npm run typecheck` and `npm test`, and keep changes focused on one thing at a time.
+Issues are welcome: bug reports and ideas help. Code contributions are not accepted without prior written permission from the author (see [License](#license)). Before proposing a change, run `npm run typecheck` and `npm test`.
 
 ## License
 
-No license has been chosen yet, so all rights are reserved by default. Add a `LICENSE` file to change that.
+**Copyright (c) 2026 Shahid Ansari. All rights reserved.**
+
+WeText is proprietary software under the [WeText Proprietary License](LICENSE). It is **not** open source: the code is published for viewing only. You may read it on GitHub and use the official service as an end user. Copying, modifying, renaming, building, running or hosting it, redistributing it, and using it to train or prompt AI models are not allowed without prior written permission. Every file in this repository that is not a third-party library is covered by the license, and forks are covered too.
+
+Third-party libraries and fonts remain under their own licenses. To ask for permission, contact Shahid Ansari through <https://github.com/shahidthisside>.

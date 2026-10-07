@@ -180,13 +180,38 @@ const routes: FastifyPluginAsync = async (app) => {
     if (content.length > MAX_LEN) throw badRequest(`Posts can be at most ${MAX_LEN} characters`);
     const hasMedia = await db.prepare('SELECT 1 FROM post_media WHERE post_id = ?').get(id);
     if (!content && !hasMedia && !post.quote_of_id) throw badRequest('A post can’t be empty');
+    // Saving without changing anything is not an edit.
+    if (content === post.content) return { post: (await hydratePosts(ctx, user.id, [id]))[0] };
     const now = Date.now();
     await db.transaction(async () => {
+      await db.prepare('INSERT INTO post_edits (id, post_id, content, replaced_at) VALUES (?, ?, ?, ?)').run(newId(), id, post.content, now);
       await db.prepare('UPDATE posts SET content = ?, edited_at = ? WHERE id = ?').run(content, now, id);
       await db.prepare('DELETE FROM post_tags WHERE post_id = ?').run(id);
       for (const t of extractTags(content)) await db.prepare('INSERT INTO post_tags (post_id, tag, created_at) VALUES (?, ?, ?)').run(id, t, post.created_at);
     });
     return { post: (await hydratePosts(ctx, user.id, [id]))[0] };
+  });
+
+  /**
+   * Edit history: every earlier version of the text, newest first. Visible to anyone who can see
+   * the post itself (same rules as reading it). It never includes who wrote an anonymous post.
+   */
+  app.get('/:id/history', async (req) => {
+    const { id } = idParam.parse(req.params);
+    const post = await getVisiblePost(id, req.user?.id ?? null);
+    if (post.expires_at && post.expires_at <= Date.now()) throw notFound();
+    const edits = (await db
+      .prepare('SELECT content, replaced_at FROM post_edits WHERE post_id = ? ORDER BY replaced_at ASC')
+      .all(id)) as { content: string; replaced_at: number }[];
+    // edits[i].content was live from the previous edit (or the post's creation) until edits[i].replaced_at.
+    const versions = edits.map((e, i) => ({ content: e.content, at: i === 0 ? post.created_at : edits[i - 1]!.replaced_at, current: false }));
+    versions.push({ content: post.content, at: post.edited_at ?? post.created_at, current: true });
+    return {
+      edited: !!post.edited_at,
+      // Edits made before history was kept have no saved earlier text.
+      complete: !post.edited_at || edits.length > 0,
+      versions: versions.reverse(),
+    };
   });
 
   app.delete('/:id', async (req) => {

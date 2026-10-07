@@ -377,6 +377,16 @@ const migrations: string[] = [
   );
   CREATE INDEX files_user ON files(user_id);
   `,
+  /* sql */ `
+  -- Every time a post is edited, the text it had before is kept here so "edited" can show the history.
+  CREATE TABLE post_edits (
+    id          TEXT PRIMARY KEY,
+    post_id     TEXT NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
+    content     TEXT NOT NULL,        -- the text that was replaced
+    replaced_at INTEGER NOT NULL      -- when it was replaced (the moment of the edit)
+  );
+  CREATE INDEX post_edits_post ON post_edits(post_id, replaced_at);
+  `,
 ];
 
 /** Fading posts are hard-deleted once they expire. */

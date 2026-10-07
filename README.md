@@ -11,8 +11,8 @@
 ![TypeScript](https://img.shields.io/badge/typescript-strict-3178c6)
 ![React](https://img.shields.io/badge/react-19-149eca)
 ![Fastify](https://img.shields.io/badge/fastify-5-000000)
-![SQLite](https://img.shields.io/badge/sqlite-FTS5-003b57)
-![Tests](https://img.shields.io/badge/tests-29%20passing-2ea44f)
+![SQLite](https://img.shields.io/badge/sqlite%2FTurso-FTS5-003b57)
+![Tests](https://img.shields.io/badge/tests-45%20passing-2ea44f)
 
 [Features](#features) · [Quick start](#quick-start) · [Architecture](#architecture) · [API](#api-overview) · [Security](#security) · [Deployment](#deployment)
 
@@ -80,8 +80,8 @@ The interface follows a "paper and ink" design language: warm paper surfaces, in
 | Layer | Technology |
 | --- | --- |
 | Web | React 19, Vite 8, Tailwind CSS 4, React Router 8, TanStack Query 5, Radix UI primitives, lucide icons, sonner |
-| API | Fastify 5, zod, Socket.IO 4, sharp |
-| Data | SQLite via better-sqlite3 (WAL mode, FTS5, migrations versioned with `user_version`) |
+| API | Fastify 5, zod, Socket.IO 4, sharp, @libsql/client |
+| Data | SQLite-compatible libSQL: a local file in development, [Turso](https://turso.tech) (hosted, free tier) in production. FTS5 search, versioned migrations, photos stored in the database |
 | Auth | scrypt password hashes, random session tokens stored as SHA-256 hashes, httpOnly `SameSite=Lax` cookie |
 | Tests | Vitest (API and socket integration tests) |
 | Fonts | Bricolage Grotesque, Geist and Instrument Serif, bundled locally with Fontsource |
@@ -108,7 +108,7 @@ Run these from the repository root.
 | `npm run dev` | Starts the API (tsx watch) and Vite, proxying `/api`, `/uploads` and `/socket.io` |
 | `npm run build` | Builds the web app and compiles the server |
 | `npm start` | Production: one Node process serves the API, websockets, uploads and the built app |
-| `npm test` | Runs the server test suite (29 tests) |
+| `npm test` | Runs the server test suite (45 tests) |
 | `npm run typecheck` | Type-checks both workspaces |
 
 ## Configuration
@@ -117,14 +117,19 @@ All settings are optional environment variables read by the server. Defaults wor
 
 | Variable | Default | Notes |
 | --- | --- | --- |
+| `DATABASE_URL` | `apps/server/data/wetext.db` | A local file path, or a Turso URL such as `libsql://name-org.turso.io` |
+| `DATABASE_AUTH_TOKEN` | | Turso access token (only for remote databases) |
+| `PUBLIC_URL` | | Public address of the site, used in password-reset emails. Required in production |
+| `BREVO_API_KEY`, `MAIL_FROM`, `MAIL_FROM_NAME` | | Password-reset email through Brevo's free plan. Without them the reset link is printed in the server log |
 | `PORT` | `4000` | HTTP port |
-| `HOST` | `127.0.0.1` | Use `0.0.0.0` in containers |
-| `DB_FILE` | `apps/server/data/wetext.db` | SQLite database path |
-| `UPLOAD_DIR` | `apps/server/uploads` | Where processed images are stored |
+| `HOST` | `127.0.0.1` | Use `0.0.0.0` in containers and on hosts like Render |
 | `WEB_ORIGIN` | `http://localhost:5173` | Allowed browser origin in development |
+| `PHOTO_QUOTA_MB` | `150` | Photo storage allowed per account |
 | `NODE_ENV` | | `production` enables `Secure` cookies, so serve over HTTPS |
 
-Fixed limits: sessions last 30 days and uploads are capped at 8 MB.
+A ready-to-copy list is in `.env.example`.
+
+Fixed limits: sessions last 30 days, uploads are capped at 8 MB, and stored photos are recompressed to stay under 3.5 MB.
 
 ## Architecture
 
@@ -134,7 +139,7 @@ WeText
 │   ├── server                 Fastify API, Socket.IO, SQLite
 │   │   ├── src
 │   │   │   ├── app.ts         App factory: security headers, sessions, CSRF guard, SPA serving
-│   │   │   ├── db.ts          Schema, FTS5 index and versioned migrations
+│   │   │   ├── db.ts          Async libSQL adapter, schema, FTS5 index and versioned migrations
 │   │   │   ├── realtime.ts    Socket.IO auth, presence and typing
 │   │   │   ├── routes/        HTTP handlers: auth, me, users, posts, feed, discover,
 │   │   │   │                  notifications, messages, uploads
@@ -156,7 +161,7 @@ All endpoints are JSON under `/api` and use the session cookie. This is a summar
 
 | Area | Endpoints |
 | --- | --- |
-| Auth | `POST /auth/signup` · `POST /auth/login` · `POST /auth/logout` · `GET /auth/me` · `GET /auth/username-available` |
+| Auth | `POST /auth/signup` · `POST /auth/login` · `POST /auth/logout` · `GET /auth/me` · `GET /auth/username-available` · `POST /auth/forgot` · `POST /auth/reset-password` |
 | Account | `PATCH /me` · `POST /me/username` · `POST /auth/password` · `POST /auth/email` · `GET /auth/sessions` · `POST /auth/delete-account` · `GET /me/bookmarks` · `GET /me/blocks` · `GET /me/mutes` |
 | Posts | `POST /posts` · `GET /posts/:id` · `PATCH /posts/:id` · `DELETE /posts/:id` · `GET /posts/:id/replies` · `POST /posts/:id/vote` |
 | Feeds | `GET /feed/foryou` · `GET /feed/following` · `GET /feed/whispers` · `GET /feed/pulse` · `GET /feed/prompt` |
@@ -166,7 +171,7 @@ All endpoints are JSON under `/api` and use the session cookie. This is a summar
 | Chats | `GET /conversations` · `POST /conversations` · `GET /conversations/:id/messages` · `POST /conversations/:id/read` · `PUT /messages/:id/reaction` · `DELETE /messages/:id` |
 | Uploads | `POST /uploads` (images only, re-encoded to WebP) |
 
-Errors use a consistent shape: `{ "error": { "code": "...", "message": "..." } }`.
+Errors use a consistent shape: `{ "error": "Human-readable message", "code": "machine_code" }`.
 
 ## Real-time events
 
@@ -185,7 +190,7 @@ Socket.IO authenticates with the same session cookie. The server pushes these ev
 - State-changing requests from a foreign `Origin` are rejected, in addition to `SameSite` cookies.
 - Login, signup, password and upload endpoints are rate limited. Login takes the same time whether or not the account exists.
 - Helmet applies a strict Content Security Policy with no inline scripts.
-- Uploads must be images. They are decoded with a pixel limit, re-encoded to WebP (which strips EXIF data) and stored in the uploader's own folder. Posts can only attach the author's own uploads.
+- Uploads must be images. They are decoded with a pixel limit, re-encoded to WebP (which strips EXIF data) and stored in the database under the uploader's id, with a per-account storage cap. Posts can only attach the author's own uploads.
 - Blocks, private accounts and whisper anonymity are enforced on the server for every read path. Whisper authors are never returned by the API.
 - Session tokens are stored as SHA-256 hashes, and changing your password signs out every other session.
 
@@ -195,30 +200,95 @@ Socket.IO authenticates with the same session cookie. The server pushes these ev
 npm test
 ```
 
-29 integration tests cover authentication, post visibility and privacy rules, search, matching, moods, prompts, fading notes, whispers, direct messages, socket events and uploads. They run against a temporary database and need no setup.
+45 integration tests cover authentication, post visibility and privacy rules, search, matching, moods, prompts, fading notes, whispers, direct messages, socket events and uploads. They run against a temporary database and need no setup. Set `TEST_DATABASE_URL=http://127.0.0.1:8080` to run them against a real libSQL server instead (for example `docker run -p 8080:8080 ghcr.io/tursodatabase/libsql-server`).
 
 ## Deployment
+
+WeText keeps **no state on the server**: users, posts, messages and photos all live in the database. That means the app can run on a free host that sleeps, restarts or wipes its disk, as long as the database is hosted somewhere durable. The recommended zero-cost setup needs **no credit card**:
+
+| Piece | Service | Why |
+| --- | --- | --- |
+| Database and photos | [Turso](https://turso.tech) free plan | Hosted SQLite (about 5 GB free), no card |
+| Web app, API, websockets | [Render](https://render.com) free web service | Runs the Node server, no card. It sleeps after 15 minutes of no traffic and wakes in 30 to 50 seconds |
+| Password-reset email | [Brevo](https://www.brevo.com) free plan | 300 emails a day. Optional |
+
+Choose the same region for Turso and Render (for example both in the US east or both in Europe) so database queries stay fast.
+
+### 1. Create the database (Turso)
+
+1. Sign up at <https://turso.tech> with GitHub.
+2. Create a database (any name, for example `wetext`) in the region closest to your Render region.
+3. Copy its URL (`libsql://wetext-yourname.turso.io`).
+4. Create a token: database page, "Create token" (read and write). Copy it.
+
+The schema is created automatically the first time the server starts.
+
+### 2. Deploy the app (Render)
+
+1. Push this repository to GitHub.
+2. In Render choose New, then Blueprint, and select the repository. Render reads `render.yaml`.
+3. When asked, enter:
+   - `DATABASE_URL`: the Turso URL
+   - `DATABASE_AUTH_TOKEN`: the Turso token
+   - `PUBLIC_URL`: `https://wetext.onrender.com` (use the address Render shows for your service, without a trailing slash)
+   - `BREVO_API_KEY` and `MAIL_FROM`: optional, see below
+4. Wait for the build, then open the service address and create the first account.
+
+### 3. Password-reset email (Brevo, optional)
+
+1. Sign up at <https://www.brevo.com>, then verify a sender address (Senders, domains and dedicated IPs, Senders).
+2. Create an API key (SMTP and API, API keys).
+3. In Render, set `BREVO_API_KEY` to the key and `MAIL_FROM` to the verified sender address, then redeploy.
+
+Mail from a free address such as Gmail can land in spam; a custom domain delivers better. Without these settings everything else works, but "Forgot password" cannot send email.
+
+### 4. Keep it awake (UptimeRobot, optional)
+
+Render's free service sleeps after 15 minutes without visitors. A free uptime monitor that visits the site every few minutes keeps it awake, so nobody waits for a cold start.
+
+1. Sign up at <https://uptimerobot.com> (free plan).
+2. Add New Monitor: type "HTTP(s)", friendly name `WeText`, URL `https://<your-service>.onrender.com/api/health`.
+3. Set the monitoring interval to 5 minutes (the free plan's shortest) and save. UptimeRobot can also email you if the site ever goes down.
+
+Check Render's current free-tier terms: if they ever change how idle services or monthly hours work, the monitor may need adjusting.
+
+### Good to know
+
+- **Cold starts.** Without the UptimeRobot monitor, the free Render service sleeps after 15 idle minutes and the next visit takes 30 to 50 seconds to wake. Either way no data is lost, because it lives in Turso.
+- **Realtime chat** works while the service is awake. Messages are always saved, so anyone who opens the app later sees them.
+- **Limits.** Turso's free plan has monthly read and write allowances that are far above what a small community uses. Each account may store 150 MB of photos by default.
+- **Backups.** Turso keeps your data durable; for an extra copy, `turso db shell wetext .dump > backup.sql`.
+- **One instance.** Realtime state (who is online, typing) lives in memory, so run a single instance.
+
+### Other ways to run it
+
+**Your own server or VM.** One Node process plus a local SQLite file works too. The `deploy/` folder has a script for an Ubuntu VM (Caddy for HTTPS, a systemd service, nightly backups):
+
+```bash
+git clone https://github.com/shahidthisside/WeText.git
+sudo bash WeText/deploy/setup.sh your-domain.example
+```
+
+**Any Node host.**
 
 ```bash
 npm install
 npm run build
-NODE_ENV=production HOST=0.0.0.0 PORT=4000 npm start
+NODE_ENV=production HOST=0.0.0.0 PORT=4000 DATABASE_URL=libsql://... DATABASE_AUTH_TOKEN=... PUBLIC_URL=https://your.site npm start
 ```
 
-- Put the app behind an HTTPS reverse proxy. Production cookies are `Secure`, so plain HTTP will not keep you signed in.
-- Persist the directories set by `DB_FILE` and `UPLOAD_DIR`.
-- SQLite means one server instance. Scaling out would need a shared database and a Socket.IO adapter.
-- Back up the SQLite file regularly (for example with `sqlite3 wetext.db ".backup backup.db"`, which is safe while the server is running).
+Put it behind an HTTPS reverse proxy: production cookies are `Secure`, so plain HTTP will not keep you signed in. Serverless platforms (Vercel, Netlify) are not a fit, because the server holds long-lived websocket connections.
 
 ## Troubleshooting
 
 | Problem | Fix |
 | --- | --- |
-| `better-sqlite3` fails to install | Use Node 22 or newer, and make sure a C++ toolchain is available (Xcode command line tools on macOS, `build-essential` on Debian/Ubuntu) |
+| `npm install` fails on a native module | Use Node 22 or newer. The database client and image library ship prebuilt binaries for macOS, Linux and Windows |
 | Port 4000 or 5173 is already in use | Stop the other process, or set `PORT` for the API |
 | Signed in but immediately signed out in production | You are serving over plain HTTP. Use HTTPS, since production cookies are `Secure` |
-| Start over with an empty local database | Stop the dev server and delete `apps/server/data` and `apps/server/uploads` |
-| Realtime chat does not update | Check that your proxy forwards WebSocket upgrades on `/socket.io` |
+| Start over with an empty local database | Stop the dev server and delete `apps/server/data` |
+| Realtime chat does not update | Check that your proxy forwards WebSocket upgrades on `/socket.io`. On Render's free plan the service may be asleep: reload and wait for it to wake |
+| Password-reset emails never arrive | Check `BREVO_API_KEY`, that `MAIL_FROM` is a sender verified in Brevo, and your spam folder. The server log shows Brevo's error |
 
 ## Contributing
 

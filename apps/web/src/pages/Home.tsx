@@ -14,6 +14,7 @@ import { MOODS } from '../lib/moods';
 import { setPrefs, usePrefs } from '../lib/prefs';
 import type { DailyPrompt } from '../lib/types';
 import { cn } from '../lib/utils';
+import { InviteButton } from '../components/Invite';
 
 type Tab = 'foryou' | 'following' | 'whispers';
 
@@ -120,7 +121,7 @@ export default function Home() {
   const [mood, setMood] = useState<string | null>(null);
   const dismissed = useFlag(GETTING_STARTED_DISMISSED);
   const m = mood ? `?mood=${mood}` : '';
-  const empty = (title: string, body: string, action?: React.ReactNode) => <EmptyState title={title} body={body} action={action} />;
+  const empty = (title: string, body: string, action?: React.ReactNode) => <EmptyState compact title={title} body={body} action={action} />;
 
   return (
     <div className="space-y-6">
@@ -174,7 +175,14 @@ export default function Home() {
           masonry
           queryKey={['feed', 'foryou', mood]}
           url={`/feed/foryou${m}`}
-          empty={empty(mood ? 'No notes with that mood yet' : 'Nothing here yet', 'Write the first one, your note will show up here.')}
+          empty={empty(
+            mood ? 'No notes with that mood yet' : 'Nothing here yet',
+            mood ? 'Write one with this mood and it will show up here.' : 'WeText is just getting started. Write the first note, or invite a friend to join you.',
+            <div className="flex flex-wrap justify-center gap-2">
+              <Button onClick={() => openComposer({})}>Write a note</Button>
+              {!mood && <InviteButton variant="outline" />}
+            </div>,
+          )}
         />
       )}
       {tab === 'following' && (

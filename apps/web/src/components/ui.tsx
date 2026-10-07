@@ -455,17 +455,17 @@ export function Card({ className, children, ...rest }: React.HTMLAttributes<HTML
 
 /* ---------------------------------------------------------------- Empty state */
 
-export function EmptyState({ title, body, action, icon }: { title: string; body?: ReactNode; action?: ReactNode; icon?: ReactNode }) {
+export function EmptyState({ title, body, action, icon, compact }: { title: string; body?: ReactNode; action?: ReactNode; icon?: ReactNode; compact?: boolean }) {
   return (
-    <div className="mx-auto flex max-w-[400px] flex-col items-center px-6 py-14 text-center animate-rise">
-      <div className="relative mb-5 flex size-20 items-center justify-center">
+    <div className={`mx-auto flex max-w-[400px] flex-col items-center px-6 text-center animate-rise ${compact ? 'py-6' : 'py-14'}`}>
+      <div className={`relative flex items-center justify-center ${compact ? 'mb-4 size-14' : 'mb-5 size-20'}`}>
         <span className="absolute inset-0 rotate-6 rounded-[26px] bg-accent-soft" />
         <span className="absolute inset-0 -rotate-3 rounded-[26px] border border-line bg-card shadow-paper" />
         <span className="relative text-fg [&>svg]:size-8">{icon ?? <LogoMark className="size-9" tile={false} />}</span>
       </div>
-      <h2 className="text-[1.5rem] font-extrabold leading-tight">{title}</h2>
+      <h2 className={`font-extrabold leading-tight ${compact ? 'text-[1.25rem]' : 'text-[1.5rem]'}`}>{title}</h2>
       {body && <p className="mt-2 text-[0.9375rem] text-fg-muted">{body}</p>}
-      {action && <div className="mt-6">{action}</div>}
+      {action && <div className={compact ? 'mt-4' : 'mt-6'}>{action}</div>}
     </div>
   );
 }

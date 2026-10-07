@@ -94,13 +94,10 @@ The interface follows a "paper and ink" design language: warm paper surfaces, in
 git clone https://github.com/shahidthisside/WeText.git
 cd WeText
 npm install
-npm run seed     # creates a demo community (wipes the dev database)
 npm run dev      # API on :4000, web app on :5173
 ```
 
-Open <http://localhost:5173> and sign in with **demo / wetext123**.
-
-All 14 seeded accounts share the password `wetext123`. To try real-time chat, sign in as `demo` in one window and as `maya_k` in another.
+Open <http://localhost:5173> and create an account. The database starts empty and is created automatically on first run, so there is no sample data: the first people to sign up are the first people on the platform. To try real-time chat locally, create two accounts in two different browser profiles (or one normal and one private window).
 
 ## Scripts
 
@@ -111,7 +108,6 @@ Run these from the repository root.
 | `npm run dev` | Starts the API (tsx watch) and Vite, proxying `/api`, `/uploads` and `/socket.io` |
 | `npm run build` | Builds the web app and compiles the server |
 | `npm start` | Production: one Node process serves the API, websockets, uploads and the built app |
-| `npm run seed` | Resets the database and fills it with demo data |
 | `npm test` | Runs the server test suite (29 tests) |
 | `npm run typecheck` | Type-checks both workspaces |
 
@@ -143,7 +139,6 @@ WeText
 │   │   │   ├── routes/        HTTP handlers: auth, me, users, posts, feed, discover,
 │   │   │   │                  notifications, messages, uploads
 │   │   │   ├── services/      Business logic: graph, posts, users, matching, notifications
-│   │   │   └── seed.ts        Demo data
 │   │   └── test/              Vitest integration suites
 │   └── web                    React single-page app
 │       └── src
@@ -213,7 +208,7 @@ NODE_ENV=production HOST=0.0.0.0 PORT=4000 npm start
 - Put the app behind an HTTPS reverse proxy. Production cookies are `Secure`, so plain HTTP will not keep you signed in.
 - Persist the directories set by `DB_FILE` and `UPLOAD_DIR`.
 - SQLite means one server instance. Scaling out would need a shared database and a Socket.IO adapter.
-- Do not run `npm run seed` against real data. It wipes the database.
+- Back up the SQLite file regularly (for example with `sqlite3 wetext.db ".backup backup.db"`, which is safe while the server is running).
 
 ## Troubleshooting
 
@@ -222,7 +217,7 @@ NODE_ENV=production HOST=0.0.0.0 PORT=4000 npm start
 | `better-sqlite3` fails to install | Use Node 22 or newer, and make sure a C++ toolchain is available (Xcode command line tools on macOS, `build-essential` on Debian/Ubuntu) |
 | Port 4000 or 5173 is already in use | Stop the other process, or set `PORT` for the API |
 | Signed in but immediately signed out in production | You are serving over plain HTTP. Use HTTPS, since production cookies are `Secure` |
-| Demo accounts are missing | Run `npm run seed` |
+| Start over with an empty local database | Stop the dev server and delete `apps/server/data` and `apps/server/uploads` |
 | Realtime chat does not update | Check that your proxy forwards WebSocket upgrades on `/socket.io` |
 
 ## Contributing

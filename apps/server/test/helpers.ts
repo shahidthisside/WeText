@@ -11,8 +11,11 @@ export interface TestUser {
 }
 
 export async function makeApp() {
-  const uploadDir = fs.mkdtempSync(path.join(os.tmpdir(), 'wetext-up-'));
-  const app = await buildApp({ dbFile: ':memory:', uploadDir, logger: false });
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wetext-test-'));
+  // TEST_DATABASE_URL lets the suite run against a real libSQL/Turso server; a unique namespace is not
+  // available on a single-db server, so tables are cleared first.
+  const remote = process.env.TEST_DATABASE_URL;
+  const app = await buildApp({ databaseUrl: remote ?? path.join(dir, 'test.db'), databaseAuthToken: process.env.TEST_DATABASE_TOKEN, logger: false });
   await app.ready();
   return app;
 }

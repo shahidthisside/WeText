@@ -28,9 +28,9 @@ describe('new features', () => {
   it('fading posts expire and are purged', async () => {
     const p = (await api(app, a).post('/api/posts', { content: 'gone soon', fade: true })).json().post;
     expect(p.expiresAt).toBeGreaterThan(Date.now() + 23 * 3600_000);
-    app.ctx.db.prepare('UPDATE posts SET expires_at = ? WHERE id = ?').run(Date.now() - 1, p.id);
+    await app.ctx.db.prepare('UPDATE posts SET expires_at = ? WHERE id = ?').run(Date.now() - 1, p.id);
     expect((await api(app, b).get(`/api/posts/${p.id}`)).statusCode).toBe(404);
-    expect(purgeExpired(app.ctx.db)).toBe(1);
+    expect(await purgeExpired(app.ctx.db)).toBe(1);
   });
 
   it('daily prompt answers', async () => {

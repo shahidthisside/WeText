@@ -1,13 +1,151 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import fs from 'node:fs';
 import path from 'node:path';
-import Database from 'better-sqlite3';
-
-export type DB = Database.Database;
+import { createClient, type Client, type InValue, type Transaction } from '@libsql/client';
 
 /**
- * Schema is applied as an ordered list of migrations. Each entry runs once and
- * its index is recorded in `PRAGMA user_version`, so adding a new entry at the
- * end is all that's needed to evolve the schema.
+ * Thin async wrapper over @libsql/client that keeps the shape the rest of the
+ * code was written against: db.prepare(sql).get/all/run/pluck(...).
+ *
+ * The same code runs against a local SQLite file (development, tests) and a
+ * remote Turso database (production), so the server itself keeps no state and
+ * can sleep, restart and redeploy on a free host without losing data.
+ */
+export type Row = Record<string, any>;
+
+const txStore = new AsyncLocalStorage<Transaction>();
+
+/** Accepts (a, b, c), ([a, b, c]) or ({1: a, 2: b, 3: c}) for numbered ?N placeholders. */
+function normalizeArgs(args: unknown[]): InValue[] {
+  let list: unknown[] = args;
+  if (args.length === 1 && args[0] && typeof args[0] === 'object' && !(args[0] instanceof Uint8Array) && !(args[0] instanceof ArrayBuffer)) {
+    const only = args[0] as Record<string, unknown>;
+    if (Array.isArray(only)) list = only;
+    else list = Object.keys(only).map(Number).sort((a, b) => a - b).map((k) => only[k]);
+  }
+  return list.map((v) => (v === undefined ? null : typeof v === 'boolean' ? (v ? 1 : 0) : (v as InValue)));
+}
+
+function toRow(columns: string[], row: ArrayLike<unknown>): Row {
+  const out: Row = {};
+  for (let i = 0; i < columns.length; i++) {
+    const v = row[i];
+    out[columns[i]!] = v instanceof ArrayBuffer ? Buffer.from(v) : v;
+  }
+  return out;
+}
+
+/** FIFO async mutex. */
+class Mutex {
+  private tail: Promise<void> = Promise.resolve();
+  async acquire(): Promise<() => void> {
+    let release!: () => void;
+    const next = new Promise<void>((r) => (release = r));
+    const prev = this.tail;
+    this.tail = prev.then(() => next);
+    await prev;
+    return release;
+  }
+}
+
+const WRITE_SQL = /^\s*(insert|update|delete|replace|create|alter|drop|pragma|vacuum|reindex)\b/i;
+
+class Statement {
+  constructor(
+    private readonly db: DB,
+    private readonly sql: string,
+    private readonly plucked = false,
+  ) {}
+
+  pluck() {
+    return new Statement(this.db, this.sql, true);
+  }
+
+  private async exec(args: unknown[]) {
+    const stmt = { sql: this.sql, args: normalizeArgs(args) };
+    // Inside a transaction: use it. Plain writes queue behind any open transaction.
+    return this.db.guarded(this.sql, (runner) => runner.execute(stmt));
+  }
+
+  async get(...args: unknown[]): Promise<any> {
+    const r = await this.exec(args);
+    const first = r.rows[0];
+    if (!first) return undefined;
+    return this.plucked ? first[0] : toRow(r.columns, first);
+  }
+
+  async all(...args: unknown[]): Promise<any[]> {
+    const r = await this.exec(args);
+    return this.plucked ? r.rows.map((row) => row[0]) : r.rows.map((row) => toRow(r.columns, row));
+  }
+
+  async run(...args: unknown[]): Promise<{ changes: number }> {
+    const r = await this.exec(args);
+    return { changes: r.rowsAffected };
+  }
+}
+
+export class DB {
+  constructor(readonly client: Client) {}
+
+  /**
+   * SQLite allows one writer at a time, and the local engine blocks the whole
+   * process while it waits for a lock. So writes and transactions are queued
+   * here instead: only one runs at a time, reads stay fully concurrent.
+   */
+  private readonly writeLock = new Mutex();
+
+  /** Inside db.transaction() every statement goes through that transaction. */
+  async guarded<T>(sql: string, fn: (runner: Client | Transaction) => Promise<T>): Promise<T> {
+    const tx = txStore.getStore();
+    if (tx) return fn(tx);
+    if (!WRITE_SQL.test(sql)) return fn(this.client);
+    const release = await this.writeLock.acquire();
+    try {
+      return await fn(this.client);
+    } finally {
+      release();
+    }
+  }
+
+  prepare(sql: string) {
+    return new Statement(this, sql);
+  }
+
+  async exec(sql: string): Promise<void> {
+    await this.guarded('INSERT', (r) => r.executeMultiple(sql));
+  }
+
+  /** Runs fn atomically. Nested calls join the outer transaction. */
+  async transaction<T>(fn: () => Promise<T>): Promise<T> {
+    if (txStore.getStore()) return fn();
+    const release = await this.writeLock.acquire();
+    try {
+      const tx = await this.client.transaction('write');
+      try {
+        const result = await txStore.run(tx, fn);
+        await tx.commit();
+        return result;
+      } catch (err) {
+        await tx.rollback().catch(() => {});
+        throw err;
+      } finally {
+        tx.close();
+      }
+    } finally {
+      release();
+    }
+  }
+
+  close() {
+    this.client.close();
+  }
+}
+
+/**
+ * Schema is applied as an ordered list of migrations. Each entry runs once, in
+ * its own transaction, and the number applied is recorded in `schema_version`,
+ * so adding a new entry at the end is all that's needed to evolve the schema.
  */
 const migrations: string[] = [
   /* sql */ `
@@ -219,30 +357,71 @@ const migrations: string[] = [
   CREATE INDEX posts_mood ON posts(mood, created_at DESC) WHERE mood IS NOT NULL;
   CREATE INDEX posts_anon ON posts(is_anonymous, created_at DESC);
   `,
+  /* sql */ `
+  CREATE TABLE password_resets (
+    token_hash TEXT PRIMARY KEY,                 -- sha256(token); the token itself is only in the email
+    user_id    TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    created_at INTEGER NOT NULL,
+    expires_at INTEGER NOT NULL
+  );
+  CREATE INDEX password_resets_user ON password_resets(user_id);
+  `,
+  /* sql */ `
+  -- Uploaded photos live in the database so the server itself stays stateless.
+  CREATE TABLE files (
+    path       TEXT PRIMARY KEY,                 -- '<userId>/<name>.webp', same as the public URL path
+    user_id    TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    mime       TEXT NOT NULL,
+    data       BLOB NOT NULL,
+    created_at INTEGER NOT NULL
+  );
+  CREATE INDEX files_user ON files(user_id);
+  `,
 ];
 
 /** Fading posts are hard-deleted once they expire. */
-export function purgeExpired(db: DB) {
-  return db.prepare('DELETE FROM posts WHERE expires_at IS NOT NULL AND expires_at <= ?').run(Date.now()).changes;
+export async function purgeExpired(db: DB) {
+  return (await db.prepare('DELETE FROM posts WHERE expires_at IS NOT NULL AND expires_at <= ?').run(Date.now())).changes;
 }
 
-export function openDb(file: string): DB {
-  if (file !== ':memory:') fs.mkdirSync(path.dirname(file), { recursive: true });
-  const db = new Database(file);
-  db.pragma('journal_mode = WAL');
-  db.pragma('foreign_keys = ON');
-  db.pragma('busy_timeout = 5000');
-  db.pragma('synchronous = NORMAL');
-  migrate(db);
+/**
+ * Opens the database. `url` is a Turso URL (libsql://...) or a local file
+ * (file:/path/to.db, or a plain path). ':memory:' is not supported because
+ * transactions use a second connection.
+ */
+export async function openDb(url: string, authToken?: string): Promise<DB> {
+  let target = url;
+  if (!/^(libsql|https?|wss?|file):/.test(target)) {
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    target = `file:${target}`;
+  } else if (target.startsWith('file:')) {
+    fs.mkdirSync(path.dirname(target.slice('file:'.length)), { recursive: true });
+  }
+  // `timeout` is the SQLite busy timeout (ms) and is applied to every pooled connection.
+  const db = new DB(createClient({ url: target, authToken: authToken || undefined, timeout: 10_000 } as Parameters<typeof createClient>[0]));
+  if (target.startsWith('file:')) {
+    await db.client.execute('PRAGMA journal_mode = WAL');
+    await db.client.execute('PRAGMA synchronous = NORMAL');
+  }
+  await migrate(db);
   return db;
 }
 
-function migrate(db: DB) {
-  const current = db.pragma('user_version', { simple: true }) as number;
+async function migrate(db: DB) {
+  await db.client.execute('CREATE TABLE IF NOT EXISTS schema_version (id INTEGER PRIMARY KEY CHECK (id = 1), version INTEGER NOT NULL)');
+  await db.client.execute('INSERT OR IGNORE INTO schema_version (id, version) VALUES (1, 0)');
+  const current = ((await db.client.execute('SELECT version FROM schema_version WHERE id = 1')).rows[0]?.[0] as number) ?? 0;
   for (let i = current; i < migrations.length; i++) {
-    db.transaction(() => {
-      db.exec(migrations[i]!);
-      db.pragma(`user_version = ${i + 1}`);
-    })();
+    const tx = await db.client.transaction('write');
+    try {
+      await tx.executeMultiple(migrations[i]!);
+      await tx.execute({ sql: 'UPDATE schema_version SET version = ? WHERE id = 1', args: [i + 1] });
+      await tx.commit();
+    } catch (err) {
+      await tx.rollback().catch(() => {});
+      throw err;
+    } finally {
+      tx.close();
+    }
   }
 }

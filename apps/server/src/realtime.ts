@@ -33,18 +33,22 @@ export class Realtime {
     });
     this.io = io;
 
-    io.use((socket, next) => {
+    io.use(async (socket, next) => {
       const token = parseCookie(socket.handshake.headers.cookie, config.sessionCookie);
       if (!token) return next(new Error('unauthorized'));
-      const row = this.db
-        .prepare(
-          'SELECT u.* FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.id = ? AND s.expires_at > ?',
-        )
-        .get(hashToken(token), Date.now()) as UserRow | undefined;
-      if (!row) return next(new Error('unauthorized'));
-      socket.data.userId = row.id;
-      socket.data.sessionId = hashToken(token);
-      next();
+      try {
+        const row = (await this.db
+          .prepare(
+            'SELECT u.* FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.id = ? AND s.expires_at > ?',
+          )
+          .get(hashToken(token), Date.now())) as UserRow | undefined;
+        if (!row) return next(new Error('unauthorized'));
+        socket.data.userId = row.id;
+        socket.data.sessionId = hashToken(token);
+        next();
+      } catch {
+        next(new Error('unavailable'));
+      }
     });
 
     io.on('connection', (socket) => this.onConnection(socket));
@@ -57,48 +61,58 @@ export class Realtime {
 
     const prev = this.sockets.get(userId) ?? 0;
     this.sockets.set(userId, prev + 1);
-    if (prev === 0) this.broadcastPresence(userId, true);
+    if (prev === 0) void this.broadcastPresence(userId, true);
 
-    socket.on('presence:watch', (ids: unknown) => {
+    socket.on('presence:watch', async (ids: unknown) => {
       const parsed = z.array(z.string().max(32)).max(200).safeParse(ids);
       if (!parsed.success) return;
       for (const room of socket.rooms) if (room.startsWith('presence:')) socket.leave(room);
-      const visible = this.visiblePresence(parsed.data);
       for (const id of parsed.data) socket.join(`presence:${id}`);
-      socket.emit('presence:snapshot', visible);
-    });
-
-    socket.on('typing', (payload: unknown) => {
-      const parsed = z.object({ conversationId: z.string().max(32) }).safeParse(payload);
-      if (!parsed.success) return;
-      const members = this.db
-        .prepare('SELECT user_id FROM conversation_members WHERE conversation_id = ?')
-        .pluck()
-        .all(parsed.data.conversationId) as string[];
-      if (!members.includes(userId)) return;
-      for (const m of members) {
-        if (m !== userId) this.emitToUser(m, 'typing', { conversationId: parsed.data.conversationId, userId });
+      try {
+        socket.emit('presence:snapshot', await this.visiblePresence(parsed.data));
+      } catch {
+        /* presence is best-effort */
       }
     });
 
-    socket.on('disconnect', () => {
+    socket.on('typing', async (payload: unknown) => {
+      const parsed = z.object({ conversationId: z.string().max(32) }).safeParse(payload);
+      if (!parsed.success) return;
+      try {
+        const members = (await this.db
+          .prepare('SELECT user_id FROM conversation_members WHERE conversation_id = ?')
+          .pluck()
+          .all(parsed.data.conversationId)) as string[];
+        if (!members.includes(userId)) return;
+        for (const m of members) {
+          if (m !== userId) this.emitToUser(m, 'typing', { conversationId: parsed.data.conversationId, userId });
+        }
+      } catch {
+        /* typing indicators are best-effort */
+      }
+    });
+
+    socket.on('disconnect', async () => {
       const n = (this.sockets.get(userId) ?? 1) - 1;
       if (n <= 0) {
         this.sockets.delete(userId);
-        const now = Date.now();
-        this.db.prepare('UPDATE users SET last_seen_at = ? WHERE id = ?').run(now, userId);
-        this.broadcastPresence(userId, false);
+        try {
+          await this.db.prepare('UPDATE users SET last_seen_at = ? WHERE id = ?').run(Date.now(), userId);
+        } catch {
+          /* closing: the database may already be gone */
+        }
+        await this.broadcastPresence(userId, false);
       } else {
         this.sockets.set(userId, n);
       }
     });
   }
 
-  private visiblePresence(ids: string[]) {
+  private async visiblePresence(ids: string[]) {
     if (ids.length === 0) return [];
-    const rows = this.db
+    const rows = (await this.db
       .prepare(`SELECT id, show_online, last_seen_at FROM users WHERE id IN (${ids.map(() => '?').join(',')})`)
-      .all(...ids) as Pick<UserRow, 'id' | 'show_online' | 'last_seen_at'>[];
+      .all(...ids)) as Pick<UserRow, 'id' | 'show_online' | 'last_seen_at'>[];
     return rows.map((r) =>
       r.show_online
         ? { userId: r.id, online: this.isOnline(r.id), lastSeenAt: r.last_seen_at }
@@ -106,12 +120,16 @@ export class Realtime {
     );
   }
 
-  private broadcastPresence(userId: string, online: boolean) {
-    const row = this.db.prepare('SELECT show_online, last_seen_at FROM users WHERE id = ?').get(userId) as
-      | Pick<UserRow, 'show_online' | 'last_seen_at'>
-      | undefined;
-    if (!row?.show_online) return;
-    this.io?.to(`presence:${userId}`).emit('presence', { userId, online, lastSeenAt: row.last_seen_at });
+  private async broadcastPresence(userId: string, online: boolean) {
+    try {
+      const row = (await this.db.prepare('SELECT show_online, last_seen_at FROM users WHERE id = ?').get(userId)) as
+        | Pick<UserRow, 'show_online' | 'last_seen_at'>
+        | undefined;
+      if (!row?.show_online) return;
+      this.io?.to(`presence:${userId}`).emit('presence', { userId, online, lastSeenAt: row.last_seen_at });
+    } catch {
+      /* presence is best-effort */
+    }
   }
 
   isOnline(userId: string) {

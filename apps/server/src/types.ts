@@ -39,7 +39,6 @@ export interface PostRow {
 export interface Ctx {
   db: DB;
   rt: Realtime;
-  uploadDir: string;
 }
 
 declare module 'fastify' {

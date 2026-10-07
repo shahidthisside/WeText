@@ -24,8 +24,9 @@ import messageRoutes from './routes/messages.js';
 import uploadRoutes from './routes/uploads.js';
 
 export interface AppOptions {
-  dbFile?: string;
-  uploadDir?: string;
+  /** Turso URL or local file path. Defaults to DATABASE_URL / DB_FILE. */
+  databaseUrl?: string;
+  databaseAuthToken?: string;
   logger?: boolean;
 }
 
@@ -41,16 +42,14 @@ export async function buildApp(opts: AppOptions = {}) {
     bodyLimit: 1024 * 1024,
   });
 
-  const db = openDb(opts.dbFile ?? config.dbFile);
-  const uploadDir = opts.uploadDir ?? config.uploadDir;
-  fs.mkdirSync(uploadDir, { recursive: true });
+  const db = await openDb(opts.databaseUrl ?? config.databaseUrl, opts.databaseAuthToken ?? config.databaseAuthToken);
   const rt = new Realtime(db);
   rt.attach(app.server);
-  const ctx: Ctx = { db, rt, uploadDir };
+  const ctx: Ctx = { db, rt };
   app.decorate('ctx', ctx);
 
-  purgeExpired(db);
-  const purgeTimer = setInterval(() => purgeExpired(db), 60_000);
+  await purgeExpired(db);
+  const purgeTimer = setInterval(() => void purgeExpired(db).catch(() => {}), 60_000);
   purgeTimer.unref();
 
   app.addHook('onClose', async () => {
@@ -94,12 +93,12 @@ export async function buildApp(opts: AppOptions = {}) {
     if (!token) return;
     const sid = hashToken(token);
     const now = Date.now();
-    const row = db
+    const row = (await db
       .prepare(
         `SELECT u.*, s.last_used_at AS s_last_used FROM sessions s JOIN users u ON u.id = s.user_id
          WHERE s.id = ? AND s.expires_at > ?`,
       )
-      .get(sid, now) as (UserRow & { s_last_used: number }) | undefined;
+      .get(sid, now)) as (UserRow & { s_last_used: number }) | undefined;
     if (!row) {
       clearSessionCookie(reply);
       return;
@@ -109,12 +108,8 @@ export async function buildApp(opts: AppOptions = {}) {
     req.sessionId = sid;
     // Sliding expiry, throttled to one write per minute.
     if (now - s_last_used > 60_000) {
-      db.prepare('UPDATE sessions SET last_used_at = ?, expires_at = ? WHERE id = ?').run(
-        now,
-        now + config.sessionTtlMs,
-        sid,
-      );
-      db.prepare('UPDATE users SET last_seen_at = ? WHERE id = ?').run(now, user.id);
+      await db.prepare('UPDATE sessions SET last_used_at = ?, expires_at = ? WHERE id = ?').run(now, now + config.sessionTtlMs, sid);
+      await db.prepare('UPDATE users SET last_seen_at = ? WHERE id = ?').run(now, user.id);
     }
   });
 
@@ -150,13 +145,13 @@ export async function buildApp(opts: AppOptions = {}) {
   await app.register(messageRoutes, { prefix: '/api' });
   await app.register(uploadRoutes, { prefix: '/api/uploads' });
 
-  // User uploads (immutable, content-addressed file names)
-  await app.register(fastifyStatic, {
-    root: uploadDir,
-    prefix: '/uploads/',
-    decorateReply: false,
-    immutable: true,
-    maxAge: '365d',
+  // User uploads live in the database. File names are random and never change, so they cache forever.
+  app.get('/uploads/:uid/:name', async (req, reply) => {
+    const { uid, name } = req.params as { uid: string; name: string };
+    if (!/^[a-z0-9]+$/.test(uid) || !/^[a-zA-Z0-9_-]+\.webp$/.test(name)) return reply.code(404).send({ error: 'Not found', code: 'not_found' });
+    const row = (await db.prepare('SELECT mime, data FROM files WHERE path = ?').get(`${uid}/${name}`)) as { mime: string; data: Buffer } | undefined;
+    if (!row) return reply.code(404).send({ error: 'Not found', code: 'not_found' });
+    return reply.header('cache-control', 'public, max-age=31536000, immutable').type(row.mime).send(row.data);
   });
 
   // Production: serve the built SPA.

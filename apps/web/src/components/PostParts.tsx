@@ -1,6 +1,6 @@
 import { Ban, Bookmark, Heart, Link2, MessageCircle, MoreHorizontal, Pencil, Quote, Repeat2, Share, Trash2, UserMinus, UserPlus, VolumeX } from 'lucide-react';
 import { useState, type MouseEvent, type ReactNode } from 'react';
-import { Link, useNavigate } from 'react-router';
+import { Link, useLocation, useNavigate } from 'react-router';
 import { toast } from 'sonner';
 import { api, errorMessage } from '../lib/api';
 import { useMe } from '../lib/auth';
@@ -135,6 +135,8 @@ export function PostActions({ post, onDark, big }: { post: Post; onDark?: boolea
 export function PostMenu({ post, onDark }: { post: Post; onDark?: boolean }) {
   const { me } = useMe();
   const del = useDeletePost();
+  const navigate = useNavigate();
+  const location = useLocation();
   const [confirm, setConfirm] = useState(false);
   const author = post.author;
   const canEdit = post.isMine && Date.now() - post.createdAt < EDIT_WINDOW;
@@ -209,7 +211,19 @@ export function PostMenu({ post, onDark }: { post: Post; onDark?: boolean }) {
         body="It will be removed from your profile, feeds and search. This can’t be undone."
         confirmLabel="Delete"
         loading={del.isPending}
-        onConfirm={() => del.mutate(post.id, { onSettled: () => setConfirm(false) })}
+        onConfirm={() =>
+          del.mutate(post.id, {
+            onSuccess: () => {
+              // Deleting the note whose own page is open: go back (or to its parent / home) instead of staring at a dead page.
+              if (location.pathname === `/post/${post.id}`) {
+                if (post.replyTo) navigate(`/post/${post.replyTo.id}`, { replace: true });
+                else if ((window.history.state?.idx ?? 0) > 0) navigate(-1);
+                else navigate('/home', { replace: true });
+              }
+            },
+            onSettled: () => setConfirm(false),
+          })
+        }
       />
     </>
   );

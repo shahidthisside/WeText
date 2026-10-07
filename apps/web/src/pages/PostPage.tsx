@@ -12,7 +12,7 @@ export default function PostPage() {
   const { id = '' } = useParams();
   const q = useQuery({
     queryKey: ['post', id],
-    queryFn: () => api.get<{ post: Post; ancestors: Post[]; missingParent: boolean }>(`/posts/${id}`),
+    queryFn: () => api.get<{ post: Post | null; ancestors: Post[]; missingParent: boolean }>(`/posts/${id}`),
   });
   const focusRef = useRef<HTMLDivElement>(null);
 
@@ -30,6 +30,9 @@ export default function PostPage() {
         <PageSpinner />
       ) : q.isError ? (
         <EmptyState title={q.error instanceof ApiError && q.error.status === 404 ? 'This note is unavailable' : 'Something went wrong'} body={q.error.message} />
+      ) : !q.data.post ? (
+        // The note was deleted while this page was open (the cache entry is cleared first, then we navigate away).
+        <EmptyState title="This note was deleted" body="It’s no longer available." />
       ) : (
         <div className="flex flex-col gap-4">
           {q.data.missingParent && <p className="rounded-2xl bg-bg-muted px-4 py-3 text-[0.875rem] text-fg-muted">This is a reply to a note that’s no longer available.</p>}

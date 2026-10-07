@@ -10,7 +10,6 @@
     "dev": "concurrently -k -n server,web -c blue,green \"npm:dev -w @wetext/server\" \"npm:dev -w @wetext/web\"",
     "build": "npm run build -w @wetext/web && npm run build -w @wetext/server",
     "start": "npm run start -w @wetext/server",
-    "seed": "npm run seed -w @wetext/server",
     "test": "npm run test -w @wetext/server",
     "typecheck": "npm run typecheck -w @wetext/server && npm run typecheck -w @wetext/web"
   },

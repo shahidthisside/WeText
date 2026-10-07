@@ -86,19 +86,6 @@ export function Login() {
           Sign in
         </Button>
       </form>
-      <div className="mt-6 rounded-2xl border border-dashed border-line-strong px-4 py-3 text-[0.875rem] text-fg-muted">
-        Trying it out? Use the demo account <b className="text-fg">demo</b> / <b className="text-fg">wetext123</b>{' '}
-        <button
-          type="button"
-          className="font-semibold text-accent hover:underline"
-          onClick={() => {
-            setLogin('demo');
-            setPassword('wetext123');
-          }}
-        >
-          Fill in
-        </button>
-      </div>
     </AuthShell>
   );
 }

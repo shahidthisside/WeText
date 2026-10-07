@@ -12,7 +12,7 @@
 ![React](https://img.shields.io/badge/react-19-149eca)
 ![Fastify](https://img.shields.io/badge/fastify-5-000000)
 ![libSQL](https://img.shields.io/badge/sqlite%2FTurso-FTS5-003b57)
-![Tests](https://img.shields.io/badge/tests-45%20passing-2ea44f)
+![Tests](https://img.shields.io/badge/tests-50%20passing-2ea44f)
 [![License: Proprietary](https://img.shields.io/badge/license-proprietary-red)](LICENSE)
 
 [Live site](https://wetextapp.onrender.com) · [Features](#features) · [Quick start](#quick-start) · [Architecture](#architecture) · [API](#api-overview) · [Security](#security) · [Deployment](#deployment)
@@ -55,7 +55,7 @@ The app keeps **no state on the server**. Accounts, posts, messages and photos a
 
 | Feature | Details |
 | --- | --- |
-| Notes | Up to 500 characters, up to 4 photos, polls (2 to 4 options, open for 1 hour to 7 days), hashtags, @mentions, quotes, reposts, threaded replies, and an edit window of one hour after posting |
+| Notes | Up to 500 characters, up to 4 photos, polls (2 to 4 options, open for 1 hour to 7 days), hashtags, @mentions, quotes, reposts, threaded replies, an edit window of one hour after posting, and a public edit history: click "edited" on a note to see every earlier version |
 | Moods | Tag a note (Glowing, Calm, Curious, Fired up, Tender, Heavy, Silly, Tired), filter feeds by mood, and see the community mood pulse |
 | Fading notes | Notes that delete themselves 24 hours after posting |
 | Whispers | Anonymous notes shown as dark serif cards. The server never returns the author of a whisper, not even to the people who follow them |
@@ -119,7 +119,7 @@ Run these from the repository root.
 | `npm run dev` | Starts the API (tsx watch) and Vite, proxying `/api`, `/uploads` and `/socket.io` |
 | `npm run build` | Builds the web app and compiles the server |
 | `npm start` | Production: one Node process serves the API, websockets and the built web app |
-| `npm test` | Runs the server test suite (45 tests) |
+| `npm test` | Runs the server test suite (50 tests) |
 | `npm run typecheck` | Type-checks both workspaces |
 
 ## Configuration
@@ -179,7 +179,7 @@ All endpoints are JSON under `/api` and use the session cookie. This is a summar
 | --- | --- |
 | Auth | `POST /auth/signup` · `POST /auth/login` · `POST /auth/logout` · `GET /auth/me` · `GET /auth/username-available` · `POST /auth/forgot` · `POST /auth/reset-password` |
 | Account | `PATCH /me` · `POST /me/username` · `POST /auth/password` · `POST /auth/email` · `GET /auth/sessions` · `POST /auth/delete-account` · `GET /me/bookmarks` · `GET /me/blocks` · `GET /me/mutes` |
-| Posts | `POST /posts` · `GET /posts/:id` · `PATCH /posts/:id` · `DELETE /posts/:id` · `GET /posts/:id/replies` · `POST /posts/:id/vote` |
+| Posts | `POST /posts` · `GET /posts/:id` · `PATCH /posts/:id` · `DELETE /posts/:id` · `GET /posts/:id/replies` · `GET /posts/:id/history` · `POST /posts/:id/vote` |
 | Feeds | `GET /feed/foryou` · `GET /feed/following` · `GET /feed/whispers` · `GET /feed/pulse` · `GET /feed/prompt` |
 | People | `GET /users/:username` · `POST /users/:username/follow` · `GET /users/:username/vibe` · `POST /users/:username/block` · `POST /users/:username/mute` |
 | Discover | `GET /search` · `GET /trending` · `GET /suggestions` · `GET /connect` · `POST /connect/:userId/pass` · `GET /tags/:tag` |
@@ -219,7 +219,7 @@ Socket.IO authenticates with the same session cookie. The server pushes these ev
 npm test
 ```
 
-45 integration tests cover authentication, post visibility and privacy rules, search, matching, moods, prompts, fading notes, whispers, direct messages, socket events, photo storage, the database adapter and password reset. They run against a temporary database and need no setup.
+50 integration tests cover authentication, post visibility and privacy rules, search, matching, moods, prompts, fading notes, whispers, edit history, direct messages, socket events, photo storage, the database adapter and password reset. They run against a temporary database and need no setup.
 
 To run them against a real libSQL server instead (the same protocol Turso uses), start one and point the tests at it:
 

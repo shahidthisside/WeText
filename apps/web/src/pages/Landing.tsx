@@ -9,16 +9,16 @@ function HeroCards() {
       {/* note */}
       <div className="absolute left-0 top-6 w-[270px] -rotate-6 rounded-[22px] border border-line bg-card p-4 shadow-[0_24px_50px_-24px_rgb(0_0_0/0.35)] animate-rise">
         <div className="flex items-center gap-2.5">
-          <Avatar user={{ displayName: 'Noor Haddad', username: 'noor', avatarUrl: null }} size={34} />
+          <Avatar user={{ displayName: 'You', username: 'you', avatarUrl: null }} size={34} />
           <div className="leading-tight">
-            <p className="font-display text-[0.875rem] font-bold">Noor Haddad</p>
-            <p className="text-[0.75rem] text-fg-subtle">@noor · 2h</p>
+            <p className="font-display text-[0.875rem] font-bold">Your name</p>
+            <p className="text-[0.75rem] text-fg-subtle">@you · just now</p>
           </div>
         </div>
         <div className="mt-3">
           <MoodChip mood="tender" />
         </div>
-        <p className="mt-2 font-display text-[1.25rem] font-semibold leading-tight tracking-tight">Wrote 400 words today. Deleted 350. Kept the 50 that matter.</p>
+        <p className="mt-2 font-display text-[1.25rem] font-semibold leading-tight tracking-tight">Say it in a few words. Add a mood. Let it fade if it’s only for now.</p>
       </div>
 
       {/* whisper */}
@@ -26,7 +26,7 @@ function HeroCards() {
         <p className="flex items-center gap-1.5 text-[0.6875rem] font-semibold uppercase tracking-[0.14em] text-on-whisper-muted">
           <VenetianMask className="size-3.5" /> Whisper
         </p>
-        <p className="mt-2 font-serif text-[1.6rem] leading-[1.1]">Everyone is improvising. Some people just hide it better.</p>
+        <p className="mt-2 font-serif text-[1.6rem] leading-[1.1]">Say the thing you can’t say out loud. Nobody will know it was you.</p>
         <div className="mt-3">
           <MoodChip mood="heavy" onDark />
         </div>
@@ -40,15 +40,15 @@ function HeroCards() {
               <circle cx="26" cy="26" r="22" fill="none" stroke="var(--wt-line)" strokeWidth="4" />
               <circle cx="26" cy="26" r="22" fill="none" stroke="var(--wt-accent)" strokeWidth="4" strokeLinecap="round" strokeDasharray="121 138" />
             </svg>
-            <span className="absolute inset-0 flex items-center justify-center font-display text-[1rem] font-extrabold">88</span>
+            <span className="absolute inset-0 flex items-center justify-center font-display text-[0.75rem] font-extrabold uppercase tracking-wide">match</span>
           </div>
           <div className="leading-tight">
-            <p className="font-display font-bold">Leo Martins</p>
-            <p className="text-[0.75rem] text-fg-muted">Both night owls</p>
+            <p className="font-display font-bold">Someone like you</p>
+            <p className="text-[0.75rem] text-fg-muted">Shared interests and vibe</p>
           </div>
         </div>
         <div className="mt-3 flex flex-wrap gap-1.5">
-          {['Film', 'Coffee', 'Photography'].map((t) => (
+          {['Music', 'Books', 'Travel'].map((t) => (
             <span key={t} className="rounded-full bg-accent-soft px-2.5 py-0.5 text-[0.75rem] font-semibold text-accent">
               {t}
             </span>
@@ -58,8 +58,8 @@ function HeroCards() {
 
       {/* chat */}
       <div className="absolute bottom-0 right-2 w-[230px] -rotate-3 space-y-2 animate-rise" style={{ animationDelay: '360ms' }}>
-        <div className="w-fit rounded-3xl rounded-bl-md bg-card px-4 py-2 text-[0.875rem] shadow-paper ring-1 ring-line">Want to grab coffee before?</div>
-        <div className="ml-auto w-fit rounded-3xl rounded-br-md bg-accent px-4 py-2 text-[0.875rem] text-on-accent shadow-paper">See you at 9 ☕</div>
+        <div className="w-fit rounded-3xl rounded-bl-md bg-card px-4 py-2 text-[0.875rem] shadow-paper ring-1 ring-line">Hey, we matched!</div>
+        <div className="ml-auto w-fit rounded-3xl rounded-br-md bg-accent px-4 py-2 text-[0.875rem] text-on-accent shadow-paper">Hey! Glad we did 👋</div>
       </div>
     </div>
   );

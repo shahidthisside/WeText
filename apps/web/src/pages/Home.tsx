@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { Link } from 'react-router';
 import { InfiniteFeed } from '../components/Feed';
 import { GETTING_STARTED_DISMISSED, GettingStarted } from '../components/GettingStarted';
-import { TrendingList } from '../components/Sidebar';
+import { TrendingList, useTrending } from '../components/Sidebar';
 import { useFlag } from '../lib/flags';
 import { Avatar, Button, EmptyState, Tabs } from '../components/ui';
 import { api } from '../lib/api';
@@ -120,6 +120,9 @@ export default function Home() {
   const [tab, setTab] = useState<Tab>(prefs.homeTab);
   const [mood, setMood] = useState<string | null>(null);
   const dismissed = useFlag(GETTING_STARTED_DISMISSED);
+  const trending = useTrending(8);
+  // The side card is the checklist, or (once dismissed) trending tags. With nothing to show, it is left out entirely.
+  const showSide = !dismissed || trending.tags.length > 0;
   const m = mood ? `?mood=${mood}` : '';
   const empty = (title: string, body: string, action?: React.ReactNode) => <EmptyState compact title={title} body={body} action={action} />;
 
@@ -132,20 +135,22 @@ export default function Home() {
         </h1>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-[1.35fr_1fr]">
+      <div className={cn('grid gap-4', showSide && 'lg:grid-cols-[1.35fr_1fr]')}>
         <div className="flex flex-col gap-4">
           <PromptCard />
           <WriteBar />
         </div>
-        <div className="flex flex-col">
-          {dismissed ? (
-            <div className="flex-1 rounded-[22px] border border-line bg-card p-5 shadow-paper">
-              <TrendingList limit={8} title="Trending now" />
-            </div>
-          ) : (
-            <GettingStarted />
-          )}
-        </div>
+        {showSide && (
+          <div className="flex flex-col">
+            {dismissed ? (
+              <div className="flex-1 rounded-[22px] border border-line bg-card p-5 shadow-paper">
+                <TrendingList limit={8} title="Trending now" />
+              </div>
+            ) : (
+              <GettingStarted />
+            )}
+          </div>
+        )}
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-3">

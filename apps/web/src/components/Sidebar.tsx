@@ -40,10 +40,16 @@ export function SearchBox({ initial = '', autoFocus }: { initial?: string; autoF
   );
 }
 
+/** Trending tags, shared by every place that shows them (same cache entry). */
+export function useTrending(limit = 10) {
+  const q = useQuery({ queryKey: ['trending'], queryFn: () => api.get<{ tags: { tag: string; posts: number }[] }>('/trending'), staleTime: 120_000 });
+  return { tags: q.data?.tags.slice(0, limit) ?? [], isPending: q.isPending };
+}
+
 /** Trending tags as a loose cloud of chips: size follows volume. */
 export function TrendingList({ limit = 10, title = 'Trending now', showEmpty = false }: { limit?: number; title?: string; showEmpty?: boolean }) {
-  const q = useQuery({ queryKey: ['trending'], queryFn: () => api.get<{ tags: { tag: string; posts: number }[] }>('/trending'), staleTime: 120_000 });
-  const tags = q.data?.tags.slice(0, limit) ?? [];
+  const q = useTrending(limit);
+  const { tags } = q;
   if (!q.isPending && !tags.length) {
     if (!showEmpty) return null;
     return (

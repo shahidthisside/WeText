@@ -5,6 +5,8 @@ services:
     name: wetext
     runtime: node
     plan: free
+    # Closest Render region to a Turso database in Mumbai (aws-ap-south-1). Change it to match yours.
+    region: singapore
     buildCommand: npm ci --include=dev && npm run build
     startCommand: npm start
     healthCheckPath: /api/health
@@ -18,7 +20,7 @@ services:
         sync: false
       - key: DATABASE_AUTH_TOKEN # from Turso: database -> Create token
         sync: false
-      - key: PUBLIC_URL          # https://wetext.onrender.com (your service address, no trailing slash)
+      - key: PUBLIC_URL          # https://<your-service>.onrender.com (the address Render shows, no trailing slash)
         sync: false
       - key: BREVO_API_KEY       # optional: password-reset emails
         sync: false

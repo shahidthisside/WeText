@@ -26,7 +26,7 @@ export default function Explore() {
         <PromptAnswers />
       ) : !q ? (
         <div className="space-y-10">
-          <TrendingList limit={12} title="Trending now" />
+          <TrendingList limit={12} title="Trending now" showEmpty />
           <WhoToFollow />
         </div>
       ) : (

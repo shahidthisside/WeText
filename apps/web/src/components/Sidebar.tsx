@@ -8,6 +8,7 @@ import type { UserCard } from '../lib/types';
 import { compact } from '../lib/utils';
 import { FollowButton } from './UserRow';
 import { Avatar, VerifiedLock } from './ui';
+import { InviteButton } from './Invite';
 
 export function SearchBox({ initial = '', autoFocus }: { initial?: string; autoFocus?: boolean }) {
   const [q, setQ] = useState(initial);
@@ -40,10 +41,26 @@ export function SearchBox({ initial = '', autoFocus }: { initial?: string; autoF
 }
 
 /** Trending tags as a loose cloud of chips: size follows volume. */
-export function TrendingList({ limit = 10, title = 'Trending now' }: { limit?: number; title?: string }) {
+export function TrendingList({ limit = 10, title = 'Trending now', showEmpty = false }: { limit?: number; title?: string; showEmpty?: boolean }) {
   const q = useQuery({ queryKey: ['trending'], queryFn: () => api.get<{ tags: { tag: string; posts: number }[] }>('/trending'), staleTime: 120_000 });
   const tags = q.data?.tags.slice(0, limit) ?? [];
-  if (!q.isPending && !tags.length) return null;
+  if (!q.isPending && !tags.length) {
+    if (!showEmpty) return null;
+    return (
+      <section>
+        <h2 className="mb-3 text-[1.25rem] font-bold">{title}</h2>
+        <div className="rounded-[22px] border border-dashed border-line-strong px-5 py-6">
+          <p className="font-display text-[1.0625rem] font-bold">Nothing is trending yet</p>
+          <p className="mt-1 max-w-[46ch] text-[0.9375rem] text-fg-muted">
+            Tags people use in their notes show up here. Write a note with a #tag, or invite a friend to start the conversation.
+          </p>
+          <div className="mt-4">
+            <InviteButton variant="outline" />
+          </div>
+        </div>
+      </section>
+    );
+  }
   const max = Math.max(1, ...tags.map((t) => t.posts));
   return (
     <section>

@@ -1,0 +1,28 @@
+[Unit]
+Description=WeText
+After=network.target
+
+[Service]
+Type=simple
+User=wetext
+WorkingDirectory=/opt/wetext
+Environment=NODE_ENV=production
+Environment=HOST=127.0.0.1
+Environment=PORT=4000
+Environment=DATABASE_URL=/var/lib/wetext/wetext.db
+# Secrets and per-site settings (PUBLIC_URL, BREVO_API_KEY, MAIL_FROM). Created by setup.sh.
+EnvironmentFile=-/etc/wetext.env
+ExecStart=/usr/bin/node apps/server/dist/index.js
+Restart=always
+RestartSec=3
+# Keep Node inside the VM's small memory
+Environment=NODE_OPTIONS=--max-old-space-size=384
+# Hardening
+NoNewPrivileges=true
+ProtectSystem=full
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/wetext
+
+[Install]
+WantedBy=multi-user.target

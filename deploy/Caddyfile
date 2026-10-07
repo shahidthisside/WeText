@@ -1,0 +1,7 @@
+# Replace the domain with yours (setup.sh does this for you).
+# Caddy gets and renews the HTTPS certificate automatically and proxies
+# websockets (/socket.io) with no extra configuration.
+{$WETEXT_DOMAIN} {
+	encode zstd gzip
+	reverse_proxy 127.0.0.1:4000
+}

@@ -1,0 +1,26 @@
+# Render Blueprint: one free web service that serves the API, websockets and the web app.
+# All data lives in Turso (database + photos), so the service can sleep and restart freely.
+services:
+  - type: web
+    name: wetext
+    runtime: node
+    plan: free
+    buildCommand: npm ci --include=dev && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_VERSION
+        value: 22
+      - key: HOST
+        value: 0.0.0.0
+      # Render asks for these when you create the Blueprint (they are never stored in git):
+      - key: DATABASE_URL        # libsql://your-db-name-your-org.turso.io
+        sync: false
+      - key: DATABASE_AUTH_TOKEN # from Turso: database -> Create token
+        sync: false
+      - key: PUBLIC_URL          # https://wetext.onrender.com (your service address, no trailing slash)
+        sync: false
+      - key: BREVO_API_KEY       # optional: password-reset emails
+        sync: false
+      - key: MAIL_FROM           # optional: a sender address verified in Brevo
+        sync: false

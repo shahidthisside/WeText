@@ -189,9 +189,13 @@ body {
   }
 }
 
-* {
-  scrollbar-width: thin;
-  scrollbar-color: var(--wt-line-strong) transparent;
+/* Thin themed scrollbars everywhere. Kept inside the base layer so Tailwind utilities
+   (such as no-scrollbar) can override it; an unlayered rule would always win. */
+@layer base {
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--wt-line-strong) transparent;
+  }
 }
 
 @utility backdrop {

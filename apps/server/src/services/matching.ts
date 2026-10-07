@@ -57,9 +57,9 @@ export function compatibility(a: UserRow, b: UserRow) {
 }
 
 /** Ranked people-you-might-click-with, excluding follows, blocks and passes. */
-export function suggestMatches(ctx: Ctx, viewer: UserRow, opts: { limit: number; excludeFollowing: boolean; excludePassed: boolean }) {
+export async function suggestMatches(ctx: Ctx, viewer: UserRow, opts: { limit: number; excludeFollowing: boolean; excludePassed: boolean }): Promise<MatchResult[]> {
   const { db } = ctx;
-  const candidates = db
+  const candidates = (await db
     .prepare(
       `SELECT u.* FROM users u
         WHERE u.id != ?1 AND u.onboarded = 1
@@ -69,17 +69,24 @@ export function suggestMatches(ctx: Ctx, viewer: UserRow, opts: { limit: number;
           ${opts.excludePassed ? 'AND u.id NOT IN (SELECT target_id FROM match_passes WHERE user_id = ?1)' : ''}
         ORDER BY u.last_seen_at DESC LIMIT 500`,
     )
-    .all({ 1: viewer.id }) as UserRow[];
+    .all({ 1: viewer.id })) as UserRow[];
 
-  const mutualStmt = db.prepare(
-    `SELECT COUNT(*) AS n FROM follows a
-      WHERE a.followee_id = ? AND a.status = 'active'
-        AND a.follower_id IN (SELECT followee_id FROM follows WHERE follower_id = ? AND status = 'active')`,
-  );
+  // Mutual followers for every candidate in a single query (one round-trip, not one per person).
+  const mutualRows = candidates.length
+    ? ((await db
+        .prepare(
+          `SELECT a.followee_id AS id, COUNT(*) AS n FROM follows a
+            WHERE a.status = 'active' AND a.followee_id IN (SELECT value FROM json_each(?1))
+              AND a.follower_id IN (SELECT followee_id FROM follows WHERE follower_id = ?2 AND status = 'active')
+            GROUP BY a.followee_id`,
+        )
+        .all({ 1: JSON.stringify(candidates.map((c) => c.id)), 2: viewer.id })) as { id: string; n: number }[])
+    : [];
+  const mutualById = new Map(mutualRows.map((r) => [r.id, r.n]));
 
   const results: MatchResult[] = candidates.map((u) => {
     const c = compatibility(viewer, u);
-    const mutualCount = (mutualStmt.get(u.id, viewer.id) as { n: number }).n;
+    const mutualCount = mutualById.get(u.id) ?? 0;
     return {
       user: {
         ...userSummary(u),

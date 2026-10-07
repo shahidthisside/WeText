@@ -46,12 +46,12 @@ interface Env {
   followees: Set<string>;
 }
 
-function makeEnv(ctx: Ctx, viewerId: string | null): Env {
-  return {
-    viewerId,
-    blocked: blockedEitherIds(ctx.db, viewerId),
-    followees: viewerId ? activeFolloweeIds(ctx.db, viewerId) : new Set(),
-  };
+async function makeEnv(ctx: Ctx, viewerId: string | null): Promise<Env> {
+  const [blocked, followees] = await Promise.all([
+    blockedEitherIds(ctx.db, viewerId),
+    viewerId ? activeFolloweeIds(ctx.db, viewerId) : Promise.resolve(new Set<string>()),
+  ]);
+  return { viewerId, blocked, followees };
 }
 
 function visible(env: Env, post: PostRow, author: UserRow | undefined): boolean {
@@ -67,21 +67,21 @@ function visible(env: Env, post: PostRow, author: UserRow | undefined): boolean 
  * Load posts by id and turn them into API views, preserving the input order
  * and silently dropping anything the viewer isn't allowed to see.
  */
-export function hydratePosts(ctx: Ctx, viewerId: string | null, ids: string[], depth = 0, envIn?: Env): PostView[] {
+export async function hydratePosts(ctx: Ctx, viewerId: string | null, ids: string[], depth = 0, envIn?: Env): Promise<PostView[]> {
   if (ids.length === 0) return [];
   const { db } = ctx;
-  const env = envIn ?? makeEnv(ctx, viewerId);
+  const env = envIn ?? (await makeEnv(ctx, viewerId));
   const json = JSON.stringify([...new Set(ids)]);
 
-  const posts = db
+  const posts = (await db
     .prepare(`SELECT * FROM posts WHERE id IN ${IN_IDS} AND (expires_at IS NULL OR expires_at > ?)`)
-    .all(json, Date.now()) as PostRow[];
+    .all(json, Date.now())) as PostRow[];
   if (posts.length === 0) return [];
 
   const parentIds = posts.map((p) => p.reply_to_id).filter(Boolean) as string[];
   const authorIds = new Set(posts.map((p) => p.author_id));
   const parents = parentIds.length
-    ? (db.prepare(`SELECT id, author_id, is_anonymous FROM posts WHERE id IN ${IN_IDS}`).all(JSON.stringify(parentIds)) as Pick<
+    ? ((await db.prepare(`SELECT id, author_id, is_anonymous FROM posts WHERE id IN ${IN_IDS}`).all(JSON.stringify(parentIds))) as Pick<
         PostRow,
         'id' | 'author_id' | 'is_anonymous'
       >[])
@@ -89,7 +89,7 @@ export function hydratePosts(ctx: Ctx, viewerId: string | null, ids: string[], d
   parents.forEach((p) => authorIds.add(p.author_id));
 
   const authors = new Map(
-    (db.prepare(`SELECT * FROM users WHERE id IN ${IN_IDS}`).all(JSON.stringify([...authorIds])) as UserRow[]).map((u) => [u.id, u]),
+    ((await db.prepare(`SELECT * FROM users WHERE id IN ${IN_IDS}`).all(JSON.stringify([...authorIds]))) as UserRow[]).map((u) => [u.id, u]),
   );
   const parentMap = new Map(parents.map((p) => [p.id, p]));
 
@@ -97,50 +97,49 @@ export function hydratePosts(ctx: Ctx, viewerId: string | null, ids: string[], d
   if (visiblePosts.length === 0) return [];
   const vjson = JSON.stringify(visiblePosts.map((p) => p.id));
 
-  const counts = new Map(
-    (
-      db
-        .prepare(
-          `SELECT p.id,
+  const viewerFlags = async (table: string) =>
+    viewerId
+      ? new Set((await db.prepare(`SELECT post_id FROM ${table} WHERE user_id = ? AND post_id IN ${IN_IDS}`).pluck().all(viewerId, vjson)) as string[])
+      : new Set<string>();
+
+  const [countRows, liked, reposted, bookmarked, mediaRows, tagRows, polls] = await Promise.all([
+    db
+      .prepare(
+        `SELECT p.id,
             (SELECT COUNT(*) FROM likes WHERE post_id = p.id) AS likes,
             (SELECT COUNT(*) FROM reposts WHERE post_id = p.id) AS reposts,
             (SELECT COUNT(*) FROM posts c WHERE c.reply_to_id = p.id) AS replies,
             (SELECT COUNT(*) FROM posts q WHERE q.quote_of_id = p.id) AS quotes
            FROM posts p WHERE p.id IN ${IN_IDS}`,
-        )
-        .all(vjson) as { id: string; likes: number; reposts: number; replies: number; quotes: number }[]
-    ).map((r) => [r.id, r]),
-  );
+      )
+      .all(vjson) as Promise<{ id: string; likes: number; reposts: number; replies: number; quotes: number }[]>,
+    viewerFlags('likes'),
+    viewerFlags('reposts'),
+    viewerFlags('bookmarks'),
+    db.prepare(`SELECT * FROM post_media WHERE post_id IN ${IN_IDS} ORDER BY position`).all(vjson) as Promise<(PostMedia & { post_id: string })[]>,
+    db.prepare(`SELECT post_id, tag FROM post_tags WHERE post_id IN ${IN_IDS}`).all(vjson) as Promise<{ post_id: string; tag: string }[]>,
+    loadPolls(ctx, viewerId, vjson),
+  ]);
 
-  const viewerFlags = (table: string) =>
-    viewerId
-      ? new Set(db.prepare(`SELECT post_id FROM ${table} WHERE user_id = ? AND post_id IN ${IN_IDS}`).pluck().all(viewerId, vjson) as string[])
-      : new Set<string>();
-  const liked = viewerFlags('likes');
-  const reposted = viewerFlags('reposts');
-  const bookmarked = viewerFlags('bookmarks');
+  const counts = new Map(countRows.map((r) => [r.id, r]));
 
   const media = new Map<string, PostMedia[]>();
-  for (const m of db
-    .prepare(`SELECT * FROM post_media WHERE post_id IN ${IN_IDS} ORDER BY position`)
-    .all(vjson) as (PostMedia & { post_id: string })[]) {
+  for (const m of mediaRows) {
     const list = media.get(m.post_id) ?? [];
     list.push({ url: m.url, width: m.width, height: m.height, alt: m.alt });
     media.set(m.post_id, list);
   }
 
   const tags = new Map<string, string[]>();
-  for (const t of db.prepare(`SELECT post_id, tag FROM post_tags WHERE post_id IN ${IN_IDS}`).all(vjson) as { post_id: string; tag: string }[]) {
+  for (const t of tagRows) {
     tags.set(t.post_id, [...(tags.get(t.post_id) ?? []), t.tag]);
   }
-
-  const polls = loadPolls(ctx, viewerId, vjson);
 
   // Quotes: hydrate one level deep only.
   const quoteIds = visiblePosts.map((p) => p.quote_of_id).filter(Boolean) as string[];
   const quotes =
     depth === 0 && quoteIds.length
-      ? new Map(hydratePosts(ctx, viewerId, quoteIds, depth + 1, env).map((q) => [q.id, q]))
+      ? new Map((await hydratePosts(ctx, viewerId, quoteIds, depth + 1, env)).map((q) => [q.id, q]))
       : new Map<string, PostView>();
 
   const byId = new Map<string, PostView>();
@@ -183,21 +182,21 @@ export function hydratePosts(ctx: Ctx, viewerId: string | null, ids: string[], d
   return ids.map((id) => byId.get(id)).filter((p): p is PostView => !!p);
 }
 
-function loadPolls(ctx: Ctx, viewerId: string | null, vjson: string): Map<string, PollView> {
+async function loadPolls(ctx: Ctx, viewerId: string | null, vjson: string): Promise<Map<string, PollView>> {
   const { db } = ctx;
-  const polls = db.prepare(`SELECT * FROM polls WHERE post_id IN ${IN_IDS}`).all(vjson) as { post_id: string; ends_at: number }[];
+  const polls = (await db.prepare(`SELECT * FROM polls WHERE post_id IN ${IN_IDS}`).all(vjson)) as { post_id: string; ends_at: number }[];
   const out = new Map<string, PollView>();
   if (polls.length === 0) return out;
   const pjson = JSON.stringify(polls.map((p) => p.post_id));
-  const options = db
+  const options = (await db
     .prepare(
       `SELECT o.id, o.post_id, o.label, (SELECT COUNT(*) FROM poll_votes v WHERE v.option_id = o.id) AS votes
        FROM poll_options o WHERE o.post_id IN ${IN_IDS} ORDER BY o.position`,
     )
-    .all(pjson) as { id: string; post_id: string; label: string; votes: number }[];
+    .all(pjson)) as { id: string; post_id: string; label: string; votes: number }[];
   const myVotes = viewerId
     ? new Map(
-        (db.prepare(`SELECT post_id, option_id FROM poll_votes WHERE user_id = ? AND post_id IN ${IN_IDS}`).all(viewerId, pjson) as {
+        ((await db.prepare(`SELECT post_id, option_id FROM poll_votes WHERE user_id = ? AND post_id IN ${IN_IDS}`).all(viewerId, pjson)) as {
           post_id: string;
           option_id: string;
         }[]).map((v) => [v.post_id, v.option_id]),
@@ -224,16 +223,16 @@ export interface FeedItem {
   repostedBy: UserSummary | null;
 }
 
-export function hydrateFeed(
+export async function hydrateFeed(
   ctx: Ctx,
   viewerId: string | null,
   rows: { post_id: string; reposted_by: string | null }[],
-): FeedItem[] {
-  const posts = new Map(hydratePosts(ctx, viewerId, rows.map((r) => r.post_id)).map((p) => [p.id, p]));
+): Promise<FeedItem[]> {
+  const posts = new Map((await hydratePosts(ctx, viewerId, rows.map((r) => r.post_id))).map((p) => [p.id, p]));
   const reposterIds = [...new Set(rows.map((r) => r.reposted_by).filter(Boolean) as string[])];
   const reposters = new Map(
     reposterIds.length
-      ? (ctx.db.prepare(`SELECT * FROM users WHERE id IN ${IN_IDS}`).all(JSON.stringify(reposterIds)) as UserRow[]).map((u) => [u.id, u])
+      ? ((await ctx.db.prepare(`SELECT * FROM users WHERE id IN ${IN_IDS}`).all(JSON.stringify(reposterIds))) as UserRow[]).map((u) => [u.id, u])
       : [],
   );
   const seen = new Set<string>();

@@ -12,22 +12,22 @@ export type NotificationType =
   | 'follow_request'
   | 'follow_accept';
 
-export function unreadNotificationCount(ctx: Ctx, userId: string): number {
+export async function unreadNotificationCount(ctx: Ctx, userId: string): Promise<number> {
   return (
-    ctx.db.prepare('SELECT COUNT(*) AS n FROM notifications WHERE user_id = ? AND read_at IS NULL').get(userId) as { n: number }
+    (await ctx.db.prepare('SELECT COUNT(*) AS n FROM notifications WHERE user_id = ? AND read_at IS NULL').get(userId)) as { n: number }
   ).n;
 }
 
-export function notify(ctx: Ctx, n: { userId: string; actorId: string; type: NotificationType; postId?: string | null }) {
+export async function notify(ctx: Ctx, n: { userId: string; actorId: string; type: NotificationType; postId?: string | null }): Promise<void> {
   const { db } = ctx;
   if (n.userId === n.actorId) return;
-  if (isBlockedEither(db, n.userId, n.actorId)) return;
-  if (db.prepare('SELECT 1 FROM mutes WHERE muter_id = ? AND muted_id = ?').get(n.userId, n.actorId)) return;
+  if (await isBlockedEither(db, n.userId, n.actorId)) return;
+  if (await db.prepare('SELECT 1 FROM mutes WHERE muter_id = ? AND muted_id = ?').get(n.userId, n.actorId)) return;
   // Avoid duplicate likes/reposts/follows on toggle spam.
-  db.prepare(
+  await db.prepare(
     'DELETE FROM notifications WHERE user_id = ? AND actor_id = ? AND type = ? AND post_id IS ?',
   ).run(n.userId, n.actorId, n.type, n.postId ?? null);
-  db.prepare('INSERT INTO notifications (id, user_id, actor_id, type, post_id, created_at) VALUES (?, ?, ?, ?, ?, ?)').run(
+  await db.prepare('INSERT INTO notifications (id, user_id, actor_id, type, post_id, created_at) VALUES (?, ?, ?, ?, ?, ?)').run(
     newId(),
     n.userId,
     n.actorId,
@@ -35,12 +35,12 @@ export function notify(ctx: Ctx, n: { userId: string; actorId: string; type: Not
     n.postId ?? null,
     Date.now(),
   );
-  ctx.rt.emitToUser(n.userId, 'notification', { unread: unreadNotificationCount(ctx, n.userId), type: n.type });
+  ctx.rt.emitToUser(n.userId, 'notification', { unread: await unreadNotificationCount(ctx, n.userId), type: n.type });
 }
 
-export function unnotify(ctx: Ctx, n: { userId: string; actorId: string; type: NotificationType; postId?: string | null }) {
-  const r = ctx.db
+export async function unnotify(ctx: Ctx, n: { userId: string; actorId: string; type: NotificationType; postId?: string | null }): Promise<void> {
+  const r = await ctx.db
     .prepare('DELETE FROM notifications WHERE user_id = ? AND actor_id = ? AND type = ? AND post_id IS ?')
     .run(n.userId, n.actorId, n.type, n.postId ?? null);
-  if (r.changes) ctx.rt.emitToUser(n.userId, 'notification', { unread: unreadNotificationCount(ctx, n.userId) });
+  if (r.changes) ctx.rt.emitToUser(n.userId, 'notification', { unread: await unreadNotificationCount(ctx, n.userId) });
 }

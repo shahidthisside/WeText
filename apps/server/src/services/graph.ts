@@ -3,35 +3,35 @@ import type { UserRow } from '../types.js';
 
 /** Social-graph queries shared across routes. */
 
-export function followStatus(db: DB, followerId: string, followeeId: string): 'none' | 'pending' | 'active' {
-  const row = db
+export async function followStatus(db: DB, followerId: string, followeeId: string): Promise<'none' | 'pending' | 'active'> {
+  const row = (await db
     .prepare('SELECT status FROM follows WHERE follower_id = ? AND followee_id = ?')
-    .get(followerId, followeeId) as { status: 'pending' | 'active' } | undefined;
+    .get(followerId, followeeId)) as { status: 'pending' | 'active' } | undefined;
   return row?.status ?? 'none';
 }
 
-export function isBlockedEither(db: DB, a: string, b: string): boolean {
-  return !!db
+export async function isBlockedEither(db: DB, a: string, b: string): Promise<boolean> {
+  return !!(await db
     .prepare(
       'SELECT 1 FROM blocks WHERE (blocker_id = ? AND blocked_id = ?) OR (blocker_id = ? AND blocked_id = ?) LIMIT 1',
     )
-    .get(a, b, b, a);
+    .get(a, b, b, a));
 }
 
 /** Can `viewerId` see content authored by `author`? (blocks + private accounts) */
-export function canViewAuthor(db: DB, viewerId: string | null, author: Pick<UserRow, 'id' | 'is_private'>): boolean {
+export async function canViewAuthor(db: DB, viewerId: string | null, author: Pick<UserRow, 'id' | 'is_private'>): Promise<boolean> {
   if (viewerId === author.id) return true;
-  if (viewerId && isBlockedEither(db, viewerId, author.id)) return false;
+  if (viewerId && (await isBlockedEither(db, viewerId, author.id))) return false;
   if (!author.is_private) return true;
-  return !!viewerId && followStatus(db, viewerId, author.id) === 'active';
+  return !!viewerId && (await followStatus(db, viewerId, author.id)) === 'active';
 }
 
 /** Whether `sender` may start a new DM conversation with `recipient`. */
-export function canStartConversation(db: DB, sender: UserRow, recipient: UserRow): { ok: boolean; reason?: string } {
+export async function canStartConversation(db: DB, sender: UserRow, recipient: UserRow): Promise<{ ok: boolean; reason?: string }> {
   if (sender.id === recipient.id) return { ok: false, reason: "You can't message yourself" };
-  if (isBlockedEither(db, sender.id, recipient.id)) return { ok: false, reason: "You can't message this account" };
+  if (await isBlockedEither(db, sender.id, recipient.id)) return { ok: false, reason: "You can't message this account" };
   if (recipient.dm_policy === 'nobody') return { ok: false, reason: `@${recipient.username} isn't accepting new messages` };
-  if (recipient.dm_policy === 'following' && followStatus(db, recipient.id, sender.id) !== 'active') {
+  if (recipient.dm_policy === 'following' && (await followStatus(db, recipient.id, sender.id)) !== 'active') {
     return { ok: false, reason: `@${recipient.username} only accepts messages from people they follow` };
   }
   return { ok: true };
@@ -43,25 +43,25 @@ export const HIDDEN_AUTHORS_SQL = `
   UNION SELECT blocker_id FROM blocks WHERE blocked_id = ?1
   UNION SELECT muted_id FROM mutes WHERE muter_id = ?1`;
 
-export function hiddenAuthorIds(db: DB, viewerId: string | null): Set<string> {
+export async function hiddenAuthorIds(db: DB, viewerId: string | null): Promise<Set<string>> {
   if (!viewerId) return new Set();
-  const rows = db.prepare(HIDDEN_AUTHORS_SQL).pluck().all({ 1: viewerId }) as string[];
+  const rows = (await db.prepare(HIDDEN_AUTHORS_SQL).pluck().all({ 1: viewerId })) as string[];
   return new Set(rows);
 }
 
-export function blockedEitherIds(db: DB, viewerId: string | null): Set<string> {
+export async function blockedEitherIds(db: DB, viewerId: string | null): Promise<Set<string>> {
   if (!viewerId) return new Set();
-  const rows = db
+  const rows = (await db
     .prepare('SELECT blocked_id FROM blocks WHERE blocker_id = ?1 UNION SELECT blocker_id FROM blocks WHERE blocked_id = ?1')
     .pluck()
-    .all({ 1: viewerId }) as string[];
+    .all({ 1: viewerId })) as string[];
   return new Set(rows);
 }
 
-export function activeFolloweeIds(db: DB, userId: string): Set<string> {
-  const rows = db
+export async function activeFolloweeIds(db: DB, userId: string): Promise<Set<string>> {
+  const rows = (await db
     .prepare("SELECT followee_id FROM follows WHERE follower_id = ? AND status = 'active'")
     .pluck()
-    .all(userId) as string[];
+    .all(userId)) as string[];
   return new Set(rows);
 }

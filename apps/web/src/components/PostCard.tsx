@@ -10,6 +10,7 @@ import { MediaGrid } from './Media';
 import { AuthorLine, PollView, PostActions, PostMenu, QuoteEmbed } from './PostParts';
 import { RichText } from './RichText';
 import { Avatar, VerifiedLock } from './ui';
+import { EditedLabel } from './EditHistory';
 
 export { PollView, QuoteEmbed };
 
@@ -86,7 +87,12 @@ function NoteCard({ post, repostedBy, threadLine, hideReplyContext }: PostCardPr
             <Link to={postUrl(post)} onClick={(e) => e.stopPropagation()} className="-mx-2 -my-2 shrink-0 px-2 py-2 hover:underline" title={fullTime(post.createdAt)}>
               <time dateTime={new Date(post.createdAt).toISOString()}>{shortTime(post.createdAt)}</time>
             </Link>
-            {post.editedAt && <span>· edited</span>}
+            {post.editedAt && (
+              <>
+                <span aria-hidden>·</span>
+                <EditedLabel postId={post.id} className="-mx-1 px-1 py-1" />
+              </>
+            )}
           </div>
         </div>
         <PostMenu post={post} />
@@ -245,7 +251,7 @@ export function FocusedPost({ post }: { post: Post }) {
 
       <div className={cn('mt-5 flex flex-wrap items-center gap-x-5 gap-y-1 text-[0.875rem]', whisper ? 'text-on-whisper-muted' : 'text-fg-muted')}>
         <time dateTime={new Date(post.createdAt).toISOString()}>{fullTime(post.createdAt)}</time>
-        {post.editedAt && <span>edited</span>}
+        {post.editedAt && <EditedLabel postId={post.id} className="-mx-1 px-1 py-1" />}
         {post.counts.likes > 0 && (
           <span>
             <b className={whisper ? 'text-on-whisper' : 'text-fg'}>{compact(post.counts.likes)}</b> likes

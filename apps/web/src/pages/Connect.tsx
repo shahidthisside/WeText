@@ -12,6 +12,7 @@ import { setFlag } from '../lib/flags';
 import { queryClient } from '../lib/query';
 import type { FollowState, Match, Me } from '../lib/types';
 import { cn, lastSeen } from '../lib/utils';
+import { InviteButton } from '../components/Invite';
 
 function DeckCard({ m, onPass, onFollow, onHi }: { m: Match; onPass: () => void; onFollow: () => void; onHi: () => void }) {
   const u = m.user;
@@ -108,7 +109,7 @@ export default function Connect() {
   const [editing, setEditing] = useState(false);
   const [tab, setTab] = useState<'all' | 'online'>('all');
   const [gone, setGone] = useState<Set<string>>(new Set());
-  const q = useQuery({ queryKey: ['connect'], queryFn: () => api.get<{ matches: Match[] }>('/connect') });
+  const q = useQuery({ queryKey: ['connect'], queryFn: () => api.get<{ matches: Match[]; hidden: number }>('/connect') });
   useEffect(() => setFlag('visited-connect', true), []);
 
   const queue = (q.data?.matches ?? []).filter((m) => !gone.has(m.user.id) && (tab === 'all' || m.user.isOnline));
@@ -211,14 +212,23 @@ export default function Connect() {
         <ErrorState error={q.error} onRetry={() => q.refetch()} />
       ) : !current ? (
         <EmptyState
-          title={tab === 'online' ? 'Nobody’s online right now' : 'You’ve met everyone for now'}
-          body={tab === 'online' ? 'Check back later, or browse your best matches.' : 'New people join every day. You can also bring back people you hid.'}
+          title={tab === 'online' ? 'Nobody’s online right now' : (q.data?.hidden ?? 0) > 0 ? 'You’ve met everyone for now' : 'No one to meet yet'}
+          body={
+            tab === 'online'
+              ? 'Check back later, or browse your best matches.'
+              : (q.data?.hidden ?? 0) > 0
+                ? 'New people join every day. You can also bring back people you hid.'
+                : 'WeText is just getting started. As people join, the ones who match your interests and vibe will show up here. Invite a friend to get things going.'
+          }
           action={
-            tab === 'all' && (
+            tab === 'all' &&
+            ((q.data?.hidden ?? 0) > 0 ? (
               <Button variant="outline" onClick={resetPasses}>
                 <RotateCcw className="size-4" /> Show hidden people
               </Button>
-            )
+            ) : (
+              <InviteButton />
+            ))
           }
         />
       ) : (

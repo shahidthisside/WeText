@@ -142,7 +142,8 @@ const routes: FastifyPluginAsync = async (app) => {
 
   app.get('/connect', async (req) => {
     const user = requireUser(req);
-    return { matches: suggestMatches(ctx, user, { limit: 30, excludeFollowing: true, excludePassed: true }) };
+    const hidden = (db.prepare('SELECT COUNT(*) AS n FROM match_passes WHERE user_id = ?').get(user.id) as { n: number }).n;
+    return { matches: suggestMatches(ctx, user, { limit: 30, excludeFollowing: true, excludePassed: true }), hidden };
   });
 
   app.post('/connect/:userId/pass', async (req) => {

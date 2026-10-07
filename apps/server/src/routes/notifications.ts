@@ -30,25 +30,25 @@ const routes: FastifyPluginAsync = async (app) => {
     const q = z.object({ cursor, filter: z.enum(['all', 'mentions']).default('all') }).parse(req.query);
     const c = decodeCursor(q.cursor, z.object({ t: z.number() }));
     const typeFilter = q.filter === 'mentions' ? "AND type IN ('mention', 'reply', 'quote')" : '';
-    const rows = db
+    const rows = (await db
       .prepare(
         `SELECT * FROM notifications WHERE user_id = ? AND created_at < ? ${typeFilter}
           ORDER BY created_at DESC LIMIT 61`,
       )
-      .all(user.id, c?.t ?? Number.MAX_SAFE_INTEGER) as NotifRow[];
+      .all(user.id, c?.t ?? Number.MAX_SAFE_INTEGER)) as NotifRow[];
     const hasMore = rows.length > 60;
     const page = rows.slice(0, 60);
 
     const actorIds = [...new Set(page.map((r) => r.actor_id))];
     const actors = new Map(
-      (db.prepare('SELECT * FROM users WHERE id IN (SELECT value FROM json_each(?))').all(JSON.stringify(actorIds)) as UserRow[]).map(
+      ((await db.prepare('SELECT * FROM users WHERE id IN (SELECT value FROM json_each(?))').all(JSON.stringify(actorIds))) as UserRow[]).map(
         (u) => [u.id, u],
       ),
     );
     const postIds = [...new Set(page.map((r) => r.post_id).filter(Boolean) as string[])];
-    const posts = new Map(hydratePosts(ctx, user.id, postIds).map((p) => [p.id, p]));
+    const posts = new Map((await hydratePosts(ctx, user.id, postIds)).map((p) => [p.id, p]));
     const anonFlags = new Map(
-      (db.prepare('SELECT id, is_anonymous FROM posts WHERE id IN (SELECT value FROM json_each(?))').all(JSON.stringify(postIds)) as Pick<
+      ((await db.prepare('SELECT id, is_anonymous FROM posts WHERE id IN (SELECT value FROM json_each(?))').all(JSON.stringify(postIds))) as Pick<
         PostRow,
         'id' | 'is_anonymous'
       >[]).map((p) => [p.id, !!p.is_anonymous]),
@@ -61,7 +61,7 @@ const routes: FastifyPluginAsync = async (app) => {
       read: boolean;
       actors: (UserSummary | null)[];
       actorCount: number;
-      post: ReturnType<typeof hydratePosts>[number] | null;
+      post: Awaited<ReturnType<typeof hydratePosts>>[number] | null;
     };
     const groups: Group[] = [];
     const byKey = new Map<string, Group>();
@@ -91,9 +91,9 @@ const routes: FastifyPluginAsync = async (app) => {
 
   app.post('/read', async (req) => {
     const user = requireUser(req);
-    db.prepare('UPDATE notifications SET read_at = ? WHERE user_id = ? AND read_at IS NULL').run(Date.now(), user.id);
+    await db.prepare('UPDATE notifications SET read_at = ? WHERE user_id = ? AND read_at IS NULL').run(Date.now(), user.id);
     ctx.rt.emitToUser(user.id, 'notification', { unread: 0 });
-    return { ok: true, unread: unreadNotificationCount(ctx, user.id) };
+    return { ok: true, unread: (await unreadNotificationCount(ctx, user.id)) };
   });
 };
 

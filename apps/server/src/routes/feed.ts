@@ -23,7 +23,7 @@ const routes: FastifyPluginAsync = async (app) => {
     const q = z.object({ cursor, mood: moodQ }).parse(req.query);
     const c = decodeCursor(q.cursor, z.object({ t: z.number() }));
     const before = c?.t ?? Number.MAX_SAFE_INTEGER;
-    const rows = db
+    const rows = (await db
       .prepare(
         `WITH f AS (SELECT followee_id AS id FROM follows WHERE follower_id = ?1 AND status = 'active'),
               hidden AS (SELECT muted_id AS id FROM mutes WHERE muter_id = ?1)
@@ -43,11 +43,11 @@ const routes: FastifyPluginAsync = async (app) => {
          ORDER BY sort_at DESC
          LIMIT ?3`,
       )
-      .all({ 1: user.id, 2: before, 3: PAGE + 1, 4: q.mood ?? null }) as { post_id: string; reposted_by: string | null; sort_at: number }[];
+      .all({ 1: user.id, 2: before, 3: PAGE + 1, 4: q.mood ?? null })) as { post_id: string; reposted_by: string | null; sort_at: number }[];
     const hasMore = rows.length > PAGE;
     const page = rows.slice(0, PAGE);
     return {
-      items: hydrateFeed(ctx, user.id, page),
+      items: await hydrateFeed(ctx, user.id, page),
       nextCursor: hasMore ? encodeCursor({ t: page[page.length - 1]!.sort_at }) : null,
     };
   });
@@ -65,15 +65,15 @@ const routes: FastifyPluginAsync = async (app) => {
     // Pin the candidate window to the first page's timestamp so pages stay stable.
     const asOf = c?.at ?? Date.now();
 
-    const hidden = hiddenAuthorIds(db, viewerId);
+    const hidden = await hiddenAuthorIds(db, viewerId);
     const interests = new Set(
       req.user ? parseJson<string[]>(req.user.interests, []).map((i) => i.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '')) : [],
     );
     const followees = viewerId
-      ? new Set(db.prepare("SELECT followee_id FROM follows WHERE follower_id = ? AND status = 'active'").pluck().all(viewerId) as string[])
+      ? new Set((await db.prepare("SELECT followee_id FROM follows WHERE follower_id = ? AND status = 'active'").pluck().all(viewerId)) as string[])
       : new Set<string>();
 
-    const candidates = db
+    const candidates = (await db
       .prepare(
         `SELECT p.id, p.author_id, p.is_anonymous, p.created_at,
            (SELECT COUNT(*) FROM likes WHERE post_id = p.id) AS likes,
@@ -85,7 +85,7 @@ const routes: FastifyPluginAsync = async (app) => {
          WHERE p.reply_to_id IS NULL AND p.created_at <= ? AND (? IS NULL OR p.mood = ?)
          ORDER BY p.created_at DESC LIMIT 600`,
       )
-      .all(asOf, q.mood ?? null, q.mood ?? null) as {
+      .all(asOf, q.mood ?? null, q.mood ?? null)) as {
       id: string;
       author_id: string;
       is_anonymous: number;
@@ -119,7 +119,7 @@ const routes: FastifyPluginAsync = async (app) => {
     const page = scored.slice(offset, offset + PAGE);
     const hasMore = scored.length > offset + PAGE;
     return {
-      items: hydrateFeed(ctx, viewerId, page.map((p) => ({ post_id: p.id, reposted_by: null }))),
+      items: await hydrateFeed(ctx, viewerId, page.map((p) => ({ post_id: p.id, reposted_by: null }))),
       nextCursor: hasMore ? encodeCursor({ o: offset + PAGE, at: asOf }) : null,
     };
   });
@@ -129,16 +129,16 @@ const routes: FastifyPluginAsync = async (app) => {
     const viewerId = req.user?.id ?? null;
     const q = z.object({ cursor, mood: moodQ }).parse(req.query);
     const c = decodeCursor(q.cursor, z.object({ t: z.number() }));
-    const rows = db
+    const rows = (await db
       .prepare(
         `SELECT id AS post_id, NULL AS reposted_by, created_at AS sort_at FROM posts
           WHERE is_anonymous = 1 AND reply_to_id IS NULL AND created_at < ? AND (? IS NULL OR mood = ?)
           ORDER BY created_at DESC LIMIT ?`,
       )
-      .all(c?.t ?? Number.MAX_SAFE_INTEGER, q.mood ?? null, q.mood ?? null, PAGE + 1) as { post_id: string; reposted_by: null; sort_at: number }[];
+      .all(c?.t ?? Number.MAX_SAFE_INTEGER, q.mood ?? null, q.mood ?? null, PAGE + 1)) as { post_id: string; reposted_by: null; sort_at: number }[];
     const page = rows.slice(0, PAGE);
     return {
-      items: hydrateFeed(ctx, viewerId, page),
+      items: await hydrateFeed(ctx, viewerId, page),
       nextCursor: rows.length > PAGE ? encodeCursor({ t: page[page.length - 1]!.sort_at }) : null,
     };
   });
@@ -149,30 +149,30 @@ const routes: FastifyPluginAsync = async (app) => {
     const p = promptForDate();
     const q = z.object({ cursor }).parse(req.query);
     const c = decodeCursor(q.cursor, z.object({ t: z.number() }));
-    const rows = db
+    const rows = (await db
       .prepare(
         `SELECT id AS post_id, NULL AS reposted_by, created_at AS sort_at FROM posts
           WHERE prompt_key = ? AND reply_to_id IS NULL AND created_at < ?
           ORDER BY created_at DESC LIMIT ?`,
       )
-      .all(p.key, c?.t ?? Number.MAX_SAFE_INTEGER, PAGE + 1) as { post_id: string; reposted_by: null; sort_at: number }[];
+      .all(p.key, c?.t ?? Number.MAX_SAFE_INTEGER, PAGE + 1)) as { post_id: string; reposted_by: null; sort_at: number }[];
     const page = rows.slice(0, PAGE);
-    const stats = db
+    const stats = (await db
       .prepare('SELECT COUNT(*) AS n, COUNT(DISTINCT author_id) AS people FROM posts WHERE prompt_key = ? AND reply_to_id IS NULL')
-      .get(p.key) as { n: number; people: number };
-    const answered = viewerId ? !!db.prepare('SELECT 1 FROM posts WHERE prompt_key = ? AND author_id = ? LIMIT 1').get(p.key, viewerId) : false;
+      .get(p.key)) as { n: number; people: number };
+    const answered = viewerId ? !!(await db.prepare('SELECT 1 FROM posts WHERE prompt_key = ? AND author_id = ? LIMIT 1').get(p.key, viewerId)) : false;
     return {
       prompt: { ...p, answers: stats.n, people: stats.people, answered },
-      items: hydrateFeed(ctx, viewerId, page),
+      items: await hydrateFeed(ctx, viewerId, page),
       nextCursor: rows.length > PAGE ? encodeCursor({ t: page[page.length - 1]!.sort_at }) : null,
     };
   });
 
   /** Mood pulse: what the community has been feeling in the last 24h. */
   app.get('/pulse', async () => {
-    const rows = db
+    const rows = (await db
       .prepare('SELECT mood, COUNT(*) AS n FROM posts WHERE mood IS NOT NULL AND created_at > ? GROUP BY mood ORDER BY n DESC')
-      .all(Date.now() - 24 * 3600_000) as { mood: string; n: number }[];
+      .all(Date.now() - 24 * 3600_000)) as { mood: string; n: number }[];
     const total = rows.reduce((s, r) => s + r.n, 0);
     return { total, moods: rows.map((r) => ({ mood: r.mood, count: r.n })) };
   });

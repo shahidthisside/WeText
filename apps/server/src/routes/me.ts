@@ -61,7 +61,7 @@ const columns: Record<string, string> = {
 const routes: FastifyPluginAsync = async (app) => {
   const ctx = app.ctx;
   const { db } = ctx;
-  const reload = (id: string) => db.prepare('SELECT * FROM users WHERE id = ?').get(id) as UserRow;
+  const reload = async (id: string) => (await db.prepare('SELECT * FROM users WHERE id = ?').get(id)) as UserRow;
 
   app.patch('/', async (req) => {
     const user = requireUser(req);
@@ -76,75 +76,75 @@ const routes: FastifyPluginAsync = async (app) => {
       sets.push(`${columns[k]} = ?`);
       vals.push(typeof val === 'boolean' ? (val ? 1 : 0) : typeof val === 'object' && val !== null ? JSON.stringify(val) : val);
     }
-    if (sets.length) db.prepare(`UPDATE users SET ${sets.join(', ')} WHERE id = ?`).run(...vals, user.id);
+    if (sets.length) await db.prepare(`UPDATE users SET ${sets.join(', ')} WHERE id = ?`).run(...vals, user.id);
 
     // Going public auto-approves pending follow requests.
     if (body.isPrivate === false && user.is_private) {
-      const pending = db.prepare("SELECT follower_id FROM follows WHERE followee_id = ? AND status = 'pending'").pluck().all(user.id) as string[];
-      db.prepare("UPDATE follows SET status = 'active' WHERE followee_id = ? AND status = 'pending'").run(user.id);
-      db.prepare("DELETE FROM notifications WHERE user_id = ? AND type = 'follow_request'").run(user.id);
-      for (const f of pending) notify(ctx, { userId: f, actorId: user.id, type: 'follow_accept' });
+      const pending = (await db.prepare("SELECT follower_id FROM follows WHERE followee_id = ? AND status = 'pending'").pluck().all(user.id)) as string[];
+      await db.prepare("UPDATE follows SET status = 'active' WHERE followee_id = ? AND status = 'pending'").run(user.id);
+      await db.prepare("DELETE FROM notifications WHERE user_id = ? AND type = 'follow_request'").run(user.id);
+      for (const f of pending) await notify(ctx, { userId: f, actorId: user.id, type: 'follow_accept' });
     }
-    return { user: me(ctx, reload(user.id)) };
+    return { user: (await me(ctx, await reload(user.id))) };
   });
 
   app.post('/username', async (req) => {
     const user = requireUser(req);
     const body = z.object({ username }).parse(req.body);
-    const taken = db.prepare('SELECT id FROM users WHERE username = ? AND id != ?').get(body.username, user.id);
+    const taken = await db.prepare('SELECT id FROM users WHERE username = ? AND id != ?').get(body.username, user.id);
     if (taken) throw conflict('That username is taken', 'username_taken');
-    db.prepare('UPDATE users SET username = ? WHERE id = ?').run(body.username, user.id);
-    return { user: me(ctx, reload(user.id)) };
+    await db.prepare('UPDATE users SET username = ? WHERE id = ?').run(body.username, user.id);
+    return { user: (await me(ctx, await reload(user.id))) };
   });
 
   app.get('/counts', async (req) => {
     const user = requireUser(req);
-    const msgs = unreadMessageCounts(ctx, user.id);
+    const msgs = await unreadMessageCounts(ctx, user.id);
     const followRequests = (
-      db.prepare("SELECT COUNT(*) AS n FROM follows WHERE followee_id = ? AND status = 'pending'").get(user.id) as { n: number }
+      (await db.prepare("SELECT COUNT(*) AS n FROM follows WHERE followee_id = ? AND status = 'pending'").get(user.id)) as { n: number }
     ).n;
-    return { notifications: unreadNotificationCount(ctx, user.id), messages: msgs.conversations, messageRequests: msgs.requests, followRequests };
+    return { notifications: await unreadNotificationCount(ctx, user.id), messages: msgs.conversations, messageRequests: msgs.requests, followRequests };
   });
 
   app.get('/follow-requests', async (req) => {
     const user = requireUser(req);
-    const rows = db
+    const rows = (await db
       .prepare(
         `SELECT u.* FROM follows f JOIN users u ON u.id = f.follower_id
           WHERE f.followee_id = ? AND f.status = 'pending' ORDER BY f.created_at DESC`,
       )
-      .all(user.id) as UserRow[];
+      .all(user.id)) as UserRow[];
     return { users: rows.map((u) => ({ ...userSummary(u), bio: u.bio })) };
   });
 
   app.post('/follow-requests/:userId/:action', async (req) => {
     const user = requireUser(req);
     const p = z.object({ userId: z.string().max(32), action: z.enum(['accept', 'decline']) }).parse(req.params);
-    const exists = db.prepare("SELECT 1 FROM follows WHERE follower_id = ? AND followee_id = ? AND status = 'pending'").get(p.userId, user.id);
+    const exists = await db.prepare("SELECT 1 FROM follows WHERE follower_id = ? AND followee_id = ? AND status = 'pending'").get(p.userId, user.id);
     if (!exists) throw notFound('Request not found');
     if (p.action === 'accept') {
-      db.prepare("UPDATE follows SET status = 'active' WHERE follower_id = ? AND followee_id = ?").run(p.userId, user.id);
-      notify(ctx, { userId: p.userId, actorId: user.id, type: 'follow_accept' });
+      await db.prepare("UPDATE follows SET status = 'active' WHERE follower_id = ? AND followee_id = ?").run(p.userId, user.id);
+      await notify(ctx, { userId: p.userId, actorId: user.id, type: 'follow_accept' });
     } else {
-      db.prepare('DELETE FROM follows WHERE follower_id = ? AND followee_id = ?').run(p.userId, user.id);
+      await db.prepare('DELETE FROM follows WHERE follower_id = ? AND followee_id = ?').run(p.userId, user.id);
     }
-    db.prepare("DELETE FROM notifications WHERE user_id = ? AND actor_id = ? AND type = 'follow_request'").run(user.id, p.userId);
+    await db.prepare("DELETE FROM notifications WHERE user_id = ? AND actor_id = ? AND type = 'follow_request'").run(user.id, p.userId);
     return { ok: true };
   });
 
   app.get('/blocks', async (req) => {
     const user = requireUser(req);
-    const rows = db
+    const rows = (await db
       .prepare('SELECT u.* FROM blocks b JOIN users u ON u.id = b.blocked_id WHERE b.blocker_id = ? ORDER BY b.created_at DESC')
-      .all(user.id) as UserRow[];
+      .all(user.id)) as UserRow[];
     return { users: rows.map(userSummary) };
   });
 
   app.get('/mutes', async (req) => {
     const user = requireUser(req);
-    const rows = db
+    const rows = (await db
       .prepare('SELECT u.* FROM mutes m JOIN users u ON u.id = m.muted_id WHERE m.muter_id = ? ORDER BY m.created_at DESC')
-      .all(user.id) as UserRow[];
+      .all(user.id)) as UserRow[];
     return { users: rows.map(userSummary) };
   });
 
@@ -152,22 +152,22 @@ const routes: FastifyPluginAsync = async (app) => {
     const user = requireUser(req);
     const q = z.object({ cursor }).parse(req.query);
     const c = decodeCursor(q.cursor, z.object({ t: z.number() }));
-    const rows = db
+    const rows = (await db
       .prepare(
         `SELECT post_id, NULL AS reposted_by, created_at AS sort_at FROM bookmarks
           WHERE user_id = ? AND created_at < ? ORDER BY created_at DESC LIMIT 21`,
       )
-      .all(user.id, c?.t ?? Number.MAX_SAFE_INTEGER) as { post_id: string; reposted_by: null; sort_at: number }[];
+      .all(user.id, c?.t ?? Number.MAX_SAFE_INTEGER)) as { post_id: string; reposted_by: null; sort_at: number }[];
     const page = rows.slice(0, 20);
     return {
-      items: hydrateFeed(ctx, user.id, page),
+      items: await hydrateFeed(ctx, user.id, page),
       nextCursor: rows.length > 20 ? encodeCursor({ t: page[page.length - 1]!.sort_at }) : null,
     };
   });
 
   app.delete('/bookmarks', async (req) => {
     const user = requireUser(req);
-    db.prepare('DELETE FROM bookmarks WHERE user_id = ?').run(user.id);
+    await db.prepare('DELETE FROM bookmarks WHERE user_id = ?').run(user.id);
     return { ok: true };
   });
 };

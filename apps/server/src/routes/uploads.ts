@@ -6,6 +6,7 @@ import { config } from '../config.js';
 import type { DB } from '../db.js';
 import { newId } from '../lib/crypto.js';
 import { badRequest } from '../lib/errors.js';
+import { repairWebm } from '../lib/webm.js';
 
 const PRESETS = {
   avatar: { width: 400, height: 400, fit: 'cover' as const },
@@ -38,6 +39,17 @@ export function sniffAudio(buf: Buffer): { mime: string; ext: string } | null {
 
 const AUDIO_MIME = new Set(['audio/webm', 'audio/ogg', 'audio/mp4', 'audio/mpeg', 'audio/wav']);
 
+/** Small cache of repaired voice notes (path -> bytes), so a clip is only repaired once per server run. */
+const repairedCache = new Map<string, Buffer>();
+function serveCache(path: string, stored: Buffer): Buffer {
+  const hit = repairedCache.get(path);
+  if (hit) return hit;
+  const fixed = repairWebm(stored);
+  if (repairedCache.size >= 64) repairedCache.delete(repairedCache.keys().next().value as string);
+  repairedCache.set(path, fixed);
+  return fixed;
+}
+
 /**
  * Serve a stored upload with correct content type, long-lived caching for images,
  * and HTTP Range support (206) for audio so iOS Safari can play voice notes.
@@ -53,7 +65,11 @@ export async function serveUpload(db: DB, req: FastifyRequest, reply: FastifyRep
     | { mime: string; data: Buffer }
     | undefined;
   if (!row) return reply.code(404).send({ error: 'Not found', code: 'not_found' });
-  const data = row.data;
+  // Voice notes recorded by some phones carry a broken clock (a jump of many seconds). Fix that on the way out, so
+  // clips uploaded before the fix play correctly too. The stored original is never changed, and healthy files are
+  // returned untouched.
+  const stored = Buffer.isBuffer(row.data) ? row.data : Buffer.from(row.data as unknown as ArrayBuffer);
+  const data = row.mime === 'audio/webm' ? serveCache(`${uid}/${name}`, stored) : stored;
   const total = data.length;
   reply.header('cache-control', 'public, max-age=31536000, immutable');
   reply.header('accept-ranges', 'bytes');
@@ -92,10 +108,11 @@ const routes: FastifyPluginAsync = async (app) => {
       if (!file) throw badRequest('No file uploaded');
 
       if (kind === 'audio') {
-        const buf = await file.toBuffer();
+        let buf = await file.toBuffer();
         if (buf.length > MAX_AUDIO_BYTES) throw badRequest('That audio clip is too large (max 2.5 MB)', 'too_large');
         const sniffed = sniffAudio(buf);
         if (!sniffed || !AUDIO_MIME.has(sniffed.mime)) throw badRequest('Only audio clips are supported (WebM, Ogg, MP4, MP3, WAV)');
+        if (sniffed.mime === 'audio/webm') buf = repairWebm(buf);
         const used = (await db.prepare('SELECT COALESCE(SUM(LENGTH(data)), 0) FROM files WHERE user_id = ?').pluck().get(user.id)) as number;
         if (used + buf.length > config.photoQuotaBytes) {
           throw badRequest('You’ve used up your storage. Delete some files to upload more.', 'storage_full');

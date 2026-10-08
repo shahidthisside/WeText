@@ -80,11 +80,11 @@ export function TrendingList({ limit = 10, title = 'Trending now', showEmpty = f
                 <Link
                   key={t.tag}
                   to={`/tag/${encodeURIComponent(t.tag)}`}
-                  className={`inline-flex items-center gap-2 rounded-full border px-4 py-2 transition-all hover:-translate-y-0.5 ${strong ? 'border-transparent bg-fg text-bg' : 'border-line-strong bg-card hover:border-fg'}`}
+                  className={`inline-flex max-w-full min-w-0 items-center gap-2 rounded-full border px-4 py-2 transition-all hover:-translate-y-0.5 ${strong ? 'border-transparent bg-fg text-bg' : 'border-line-strong bg-card hover:border-fg'}`}
                 >
-                  <span className="text-[0.6875rem] font-semibold opacity-60">{i + 1}</span>
-                  <span className={`font-display font-bold ${strong ? 'text-[1.0625rem]' : 'text-[0.9375rem]'}`}>#{t.tag}</span>
-                  <span className="text-[0.75rem] opacity-60">{compact(t.posts)}</span>
+                  <span className="shrink-0 text-[0.6875rem] font-semibold opacity-60">{i + 1}</span>
+                  <span className={`min-w-0 truncate font-display font-bold ${strong ? 'text-[1.0625rem]' : 'text-[0.9375rem]'}`}>#{t.tag}</span>
+                  <span className="shrink-0 text-[0.75rem] opacity-60">{compact(t.posts)}</span>
                 </Link>
               );
             })}

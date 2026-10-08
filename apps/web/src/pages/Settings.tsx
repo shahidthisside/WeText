@@ -31,8 +31,8 @@ export default function Settings() {
   return (
     <div className="mx-auto max-w-[1020px]">
       <PageHeader back={!!section} backOnlyMobile eyebrow="Settings" title={active && section ? active.label : 'Make it yours'} />
-      <div className="grid gap-6 md:grid-cols-[280px_1fr]">
-        <nav className={cn('space-y-1', section && 'max-md:hidden')} aria-label="Settings">
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-6 md:grid-cols-[280px_minmax(0,1fr)]">
+        <nav className={cn('min-w-0 space-y-1', section && 'max-md:hidden')} aria-label="Settings">
           {SECTIONS.map((s) => (
             <Link
               key={s.key}

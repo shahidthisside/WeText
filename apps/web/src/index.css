@@ -192,6 +192,14 @@ body {
 /* Thin themed scrollbars everywhere. Kept inside the base layer so Tailwind utilities
    (such as no-scrollbar) can override it; an unlayered rule would always win. */
 @layer base {
+  /* A plain grid is one column that may shrink below its content. Without this the implicit column is
+     sized to its widest child, so a long word or a row of buttons stretches the whole page on a phone.
+     Utilities such as grid-cols-2 or lg:grid-cols-[...] still override it. */
+  .grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+@layer base {
   * {
     scrollbar-width: thin;
     scrollbar-color: var(--wt-line-strong) transparent;

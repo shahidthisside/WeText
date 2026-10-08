@@ -63,7 +63,7 @@ export const IconButton = forwardRef<HTMLButtonElement, ButtonHTMLAttributes<HTM
         aria-label={label}
         title={label}
         className={cn(
-          'inline-flex size-9 shrink-0 items-center justify-center rounded-full transition-colors disabled:opacity-40',
+          'inline-flex size-9 shrink-0 items-center justify-center rounded-full transition-colors disabled:opacity-40 pointer-coarse:size-10',
           tone === 'accent' ? 'text-accent hover:bg-accent-soft' : 'text-fg hover:bg-bg-hover',
           className,
         )}

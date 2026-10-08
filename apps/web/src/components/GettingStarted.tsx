@@ -42,7 +42,7 @@ export function GettingStarted() {
 
   return (
     <section className="relative rounded-[22px] border border-line bg-card p-5 shadow-paper" aria-label="Getting started">
-      <button onClick={close} aria-label="Dismiss getting started" title="Dismiss" className="absolute right-2.5 top-2.5 flex size-9 items-center justify-center rounded-full text-fg-subtle transition-colors hover:bg-bg-hover hover:text-fg">
+      <button onClick={close} aria-label="Dismiss getting started" title="Dismiss" className="absolute right-2 top-2 flex size-9 pointer-coarse:size-10 items-center justify-center rounded-full text-fg-subtle transition-colors hover:bg-bg-hover hover:text-fg">
         <X className="size-4" />
       </button>
       {all ? (

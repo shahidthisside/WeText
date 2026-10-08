@@ -108,7 +108,7 @@ export function VoiceRecorderControl({
         aria-label="Record voice message"
         disabled={disabled}
         onClick={() => begin()}
-        className="flex size-9 shrink-0 items-center justify-center rounded-full text-accent transition-colors hover:bg-accent-soft disabled:opacity-40"
+        className="flex size-9 shrink-0 items-center justify-center rounded-full text-accent transition-colors hover:bg-accent-soft disabled:opacity-40 pointer-coarse:size-10"
       >
         <Mic className="size-5" />
       </button>

@@ -58,7 +58,7 @@ function Act({
         onClick(e);
       }}
       className={cn(
-        'group inline-flex h-9 min-w-9 items-center justify-center gap-1 rounded-full px-2 text-[0.8125rem] font-medium transition-colors',
+        'group inline-flex h-9 min-w-9 items-center justify-center gap-1 rounded-full px-2 text-[0.8125rem] font-medium transition-colors pointer-coarse:h-10 pointer-coarse:min-w-10',
         onDark ? 'text-on-whisper-muted hover:bg-white/10' : 'text-fg-muted hover:bg-bg-hover',
         hover,
         active && on,
@@ -91,7 +91,7 @@ export function PostActions({ post, onDark, big }: { post: Post; onDark?: boolea
             onClick={(e) => e.stopPropagation()}
             aria-label={post.viewer.reposted ? 'Undo repost' : 'Repost'}
             className={cn(
-              'inline-flex h-9 min-w-9 items-center justify-center gap-1 rounded-full px-2 text-[0.8125rem] font-medium transition-colors hover:text-repost',
+              'inline-flex h-9 min-w-9 items-center justify-center gap-1 rounded-full px-2 text-[0.8125rem] font-medium transition-colors hover:text-repost pointer-coarse:h-10 pointer-coarse:min-w-10',
               onDark ? 'text-on-whisper-muted hover:bg-white/10' : 'text-fg-muted hover:bg-bg-hover',
               post.viewer.reposted && 'text-repost',
             )}
@@ -166,7 +166,7 @@ export function PostMenu({ post, onDark }: { post: Post; onDark?: boolean }) {
             type="button"
             aria-label="More options"
             onClick={(e) => e.stopPropagation()}
-            className={cn('-mr-2 flex size-9 items-center justify-center rounded-full transition-colors', onDark ? 'text-on-whisper-muted hover:bg-white/10' : 'text-fg-subtle hover:bg-bg-hover hover:text-fg')}
+            className={cn('-mr-2 flex size-9 items-center justify-center rounded-full transition-colors pointer-coarse:size-10', onDark ? 'text-on-whisper-muted hover:bg-white/10' : 'text-fg-subtle hover:bg-bg-hover hover:text-fg')}
           >
             <MoreHorizontal className="size-[18px]" />
           </button>

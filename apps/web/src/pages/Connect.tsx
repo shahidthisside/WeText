@@ -19,22 +19,22 @@ function DeckCard({ m, onPass, onFollow, onHi }: { m: Match; onPass: () => void;
   const u = m.user;
   const status = u.isOnline ? 'Online now' : lastSeen(u.lastSeenAt);
   return (
-    <article className="relative overflow-hidden rounded-[32px] border border-line bg-card shadow-[0_30px_60px_-30px_rgb(0_0_0/0.4)]" aria-label={`Suggested: ${u.displayName}`}>
+    <article className="relative min-w-0 overflow-hidden rounded-[28px] border border-line bg-card shadow-[0_30px_60px_-30px_rgb(0_0_0/0.4)]" aria-label={`Suggested: ${u.displayName}`}>
       <div className="relative h-20 overflow-hidden bg-accent-soft">
         <div aria-hidden className="absolute -bottom-8 right-12 size-32 rounded-full bg-accent/20" />
         <div aria-hidden className="absolute -bottom-14 right-0 size-32 rounded-full bg-accent/15" />
       </div>
-      <div className="px-6 pb-6 sm:px-8">
-        <div className="-mt-10 flex items-end justify-between">
-          <Link to={`/${u.username}`} className="rounded-[36%] ring-[5px] ring-card">
+      <div className="px-4 pb-5 min-[400px]:px-6 min-[400px]:pb-6 sm:px-8">
+        <div className="-mt-10 flex items-end justify-between gap-3">
+          <Link to={`/${u.username}`} className="shrink-0 rounded-[36%] ring-[5px] ring-card">
             <Avatar user={u} size={88} online={u.isOnline} />
           </Link>
           <ScoreRing score={m.score} size={76} />
         </div>
         <Link to={`/${u.username}`} className="mt-4 block">
-          <h2 className="text-[1.9rem] font-extrabold leading-tight hover:underline">{u.displayName}</h2>
+          <h2 className="break-words text-[1.5rem] font-extrabold leading-tight hover:underline min-[400px]:text-[1.9rem]">{u.displayName}</h2>
           <p className="mt-0.5 flex flex-wrap items-center gap-x-3 text-[0.9375rem] text-fg-muted">
-            <span>@{u.username}</span>
+            <span className="min-w-0 break-all">@{u.username}</span>
             {u.location && (
               <span className="inline-flex items-center gap-1">
                 <MapPin className="size-3.5" /> {u.location}
@@ -43,7 +43,7 @@ function DeckCard({ m, onPass, onFollow, onHi }: { m: Match; onPass: () => void;
             {status && <span className={cn('text-[0.8125rem]', u.isOnline && 'font-semibold text-online')}>{status}</span>}
           </p>
         </Link>
-        {u.bio && <p className="mt-3 text-[1.0625rem] leading-relaxed">{u.bio}</p>}
+        {u.bio && <p className="mt-3 break-words text-[1rem] leading-relaxed min-[400px]:text-[1.0625rem]">{u.bio}</p>}
 
         {m.sharedInterests.length > 0 && (
           <div className="mt-5">
@@ -88,15 +88,15 @@ function DeckCard({ m, onPass, onFollow, onHi }: { m: Match; onPass: () => void;
           </p>
         )}
 
-        <div className="mt-5 flex items-center gap-3">
-          <IconButton label="Not for me (←)" className="size-12 border border-line-strong" onClick={onPass}>
+        <div className="mt-5 flex items-center gap-2 min-[400px]:gap-3">
+          <IconButton label="Not for me (←)" className="size-12 shrink-0 border border-line-strong" onClick={onPass}>
             <X className="size-5" />
           </IconButton>
-          <Button size="lg" variant="outline" className="flex-1" onClick={onHi}>
-            <MessageCircle className="size-[18px]" /> Say hi
+          <Button size="lg" variant="outline" className="min-w-0 flex-1 gap-1.5 px-3 min-[400px]:gap-2 min-[400px]:px-5" onClick={onHi}>
+            <MessageCircle className="size-[18px] shrink-0" /> <span className="truncate">Say hi</span>
           </Button>
-          <Button size="lg" className="flex-1" onClick={onFollow}>
-            <UserPlus className="size-[18px]" /> Follow
+          <Button size="lg" className="min-w-0 flex-1 gap-1.5 px-3 min-[400px]:gap-2 min-[400px]:px-5" onClick={onFollow}>
+            <UserPlus className="size-[18px] shrink-0" /> <span className="truncate">Follow</span>
           </Button>
         </div>
       </div>
@@ -240,10 +240,10 @@ export default function Connect() {
           }
         />
       ) : (
-        <div className="grid gap-8 lg:grid-cols-[minmax(0,560px)_1fr]">
-          <div className="relative mx-auto w-full max-w-[560px]">
-            {queue[2] && <div aria-hidden className="absolute inset-x-8 top-5 h-full rounded-[32px] border border-line bg-card opacity-60" />}
-            {queue[1] && <div aria-hidden className="absolute inset-x-4 top-2.5 h-full rounded-[32px] border border-line bg-card opacity-80" />}
+        <div className="grid min-w-0 gap-8 lg:grid-cols-[minmax(0,560px)_1fr]">
+          <div className="relative mx-auto w-full min-w-0 max-w-[560px] pb-6">
+            {queue[2] && <div aria-hidden className="absolute inset-x-6 top-4 h-[calc(100%-1.5rem)] rounded-[32px] border border-line bg-card opacity-60" />}
+            {queue[1] && <div aria-hidden className="absolute inset-x-3 top-2 h-[calc(100%-1.5rem)] rounded-[32px] border border-line bg-card opacity-80" />}
             <div key={current.user.id} className="relative animate-rise">
               <DeckCard m={current} onPass={() => pass(current)} onFollow={() => follow(current)} onHi={() => hi(current)} />
             </div>

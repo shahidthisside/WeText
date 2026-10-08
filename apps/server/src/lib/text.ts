@@ -21,3 +21,14 @@ export function extractMentions(text: string): string[] {
 export function normalizeText(text: string): string {
   return text.replace(/\r\n?/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
 }
+
+/**
+ * Length in Unicode code points, not UTF-16 units. A string like "👍" is one
+ * code point but two UTF-16 units, so `.length` would over-count it and reject
+ * posts, bios and names that are actually within the limit (or let through
+ * surrogate-heavy input past a byte-ish cap). Spreading the string iterates by
+ * code point.
+ */
+export function codePointLength(text: string): number {
+  return [...text].length;
+}

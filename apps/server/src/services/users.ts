@@ -1,5 +1,5 @@
 import type { Ctx, UserRow } from '../types.js';
-import { followStatus, isBlockedEither, canStartConversation } from './graph.js';
+import { canViewAuthor, followStatus, isBlockedEither, canStartConversation } from './graph.js';
 
 export interface UserSummary {
   id: string;
@@ -88,13 +88,18 @@ export async function userProfile(ctx: Ctx, u: UserRow, viewerId: string | null)
   }
 
   const blockedBy = viewer?.blockedBy ?? false;
+  // Can the viewer see this account's content? name/bio/avatar stay public (Instagram-style),
+  // but interests and traits are hidden from a blocked-by viewer and from anyone who can't view a
+  // private account (not the owner, not an active follower).
+  const canSee = await canViewAuthor(db, viewerId, u);
+  const hideDetails = blockedBy || !canSee;
   return {
     ...userSummary(u),
     bio: blockedBy ? '' : u.bio,
     location: blockedBy ? '' : u.location,
     website: blockedBy ? '' : u.website,
     bannerUrl: u.banner_url,
-    interests: blockedBy ? [] : parseJson<string[]>(u.interests, []),
+    interests: hideDetails ? [] : parseJson<string[]>(u.interests, []),
     createdAt: u.created_at,
     followersCount: counts.followers,
     followingCount: counts.following,

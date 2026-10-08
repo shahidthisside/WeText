@@ -1,4 +1,9 @@
 import { z } from 'zod';
+import { codePointLength } from './text.js';
+
+/** A refine that rejects strings longer than `max` Unicode code points (not UTF-16 units). */
+export const withinCodePoints = (max: number) => (s: string) => codePointLength(s) <= max;
+
 
 export const RESERVED_USERNAMES = new Set([
   'admin', 'root', 'api', 'login', 'signup', 'logout', 'settings', 'explore', 'search', 'home', 'messages',
@@ -20,7 +25,12 @@ export const password = z
   .min(8, 'Must be at least 8 characters')
   .max(200, 'Too long')
   .refine((p) => /[a-zA-Z]/.test(p) && /[0-9]/.test(p), 'Use at least one letter and one number');
-export const displayName = z.string().trim().min(1, 'Name is required').max(50, 'Max 50 characters');
+export const displayName = z
+  .string()
+  .trim()
+  .min(1, 'Name is required')
+  .max(100)
+  .refine(withinCodePoints(50), 'Max 50 characters');
 
 /** Opaque pagination cursor, encoded as base64url JSON. */
 export const cursor = z.string().max(200).optional();

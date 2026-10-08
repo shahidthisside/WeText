@@ -3,10 +3,10 @@ import { z } from 'zod';
 import { requireUser } from '../app.js';
 import { newId } from '../lib/crypto.js';
 import { badRequest, forbidden, notFound } from '../lib/errors.js';
-import { extractMentions, extractTags, normalizeText } from '../lib/text.js';
+import { extractMentions, extractTags, normalizeText, codePointLength } from '../lib/text.js';
 import { cursor, decodeCursor, encodeCursor, uploadUrl } from '../lib/validation.js';
 import { MOOD_KEYS, promptForDate } from '../lib/catalog.js';
-import { canViewAuthor, isBlockedEither } from '../services/graph.js';
+import { canViewAuthor, isBlockedEither, blockedEitherIds } from '../services/graph.js';
 import { notify, unnotify } from '../services/notifications.js';
 import { hydratePosts } from '../services/posts.js';
 import { userSummary } from '../services/users.js';
@@ -27,7 +27,7 @@ const createSchema = z
     replyToId: z.string().max(32).nullish(),
     quoteOfId: z.string().max(32).nullish(),
     media: z
-      .array(z.object({ url: uploadUrl, width: z.number().int().positive(), height: z.number().int().positive(), alt: z.string().max(300).default('') }))
+      .array(z.object({ url: uploadUrl, width: z.number().int().positive(), height: z.number().int().positive(), alt: z.string().trim().max(300).default('') }))
       .max(4)
       .default([]),
     poll: z
@@ -58,7 +58,7 @@ const routes: FastifyPluginAsync = async (app) => {
   app.post('/', async (req, reply) => {
     const user = requireUser(req);
     const body = createSchema.parse(req.body);
-    if (body.content.length > MAX_LEN) throw badRequest(`Posts can be at most ${MAX_LEN} characters`);
+    if (codePointLength(body.content) > MAX_LEN) throw badRequest(`Posts can be at most ${MAX_LEN} characters`);
     if (!body.content && body.media.length === 0 && !body.quoteOfId) throw badRequest('Write something first');
     if (body.poll && body.media.length) throw badRequest('A post can have images or a poll, not both');
     if (body.poll && !body.content) throw badRequest('Add a question for your poll');
@@ -177,7 +177,7 @@ const routes: FastifyPluginAsync = async (app) => {
     if (!post) throw notFound();
     if (post.author_id !== user.id) throw forbidden();
     if (Date.now() - post.created_at > EDIT_WINDOW_MS) throw badRequest('Posts can only be edited within an hour of posting');
-    if (content.length > MAX_LEN) throw badRequest(`Posts can be at most ${MAX_LEN} characters`);
+    if (codePointLength(content) > MAX_LEN) throw badRequest(`Posts can be at most ${MAX_LEN} characters`);
     const hasMedia = await db.prepare('SELECT 1 FROM post_media WHERE post_id = ?').get(id);
     if (!content && !hasMedia && !post.quote_of_id) throw badRequest('A post can’t be empty');
     // Saving without changing anything is not an edit.
@@ -187,7 +187,7 @@ const routes: FastifyPluginAsync = async (app) => {
       await db.prepare('INSERT INTO post_edits (id, post_id, content, replaced_at) VALUES (?, ?, ?, ?)').run(newId(), id, post.content, now);
       await db.prepare('UPDATE posts SET content = ?, edited_at = ? WHERE id = ?').run(content, now, id);
       await db.prepare('DELETE FROM post_tags WHERE post_id = ?').run(id);
-      for (const t of extractTags(content)) await db.prepare('INSERT INTO post_tags (post_id, tag, created_at) VALUES (?, ?, ?)').run(id, t, post.created_at);
+      for (const t of extractTags(content)) await db.prepare('INSERT INTO post_tags (post_id, tag, created_at) VALUES (?, ?, ?)').run(id, t, now);
     });
     return { post: (await hydratePosts(ctx, user.id, [id]))[0] };
   });
@@ -220,7 +220,24 @@ const routes: FastifyPluginAsync = async (app) => {
     const post = (await db.prepare('SELECT author_id FROM posts WHERE id = ?').get(id)) as { author_id: string } | undefined;
     if (!post) throw notFound();
     if (post.author_id !== user.id) throw forbidden();
-    await db.prepare('DELETE FROM posts WHERE id = ?').run(id);
+    // Delete the post and its whole reply subtree in one transaction, so replies don't become
+    // orphaned top-level posts (reply_to_id is ON DELETE SET NULL). A recursive CTE collects every
+    // descendant; quote_of_id references stay safe (SET NULL -> rendered "unavailable") and reposts,
+    // likes, media, tags, polls and notifications for the deleted posts cascade away via their FKs.
+    await db.transaction(async () => {
+      const toDelete = (await db
+        .prepare(
+          `WITH RECURSIVE tree(id) AS (
+             SELECT ?1
+             UNION ALL
+             SELECT p.id FROM posts p JOIN tree ON p.reply_to_id = tree.id
+           )
+           SELECT id FROM tree`,
+        )
+        .pluck()
+        .all(id)) as string[];
+      await db.prepare(`DELETE FROM posts WHERE id IN (SELECT value FROM json_each(?))`).run(JSON.stringify(toDelete));
+    });
     return { ok: true };
   });
 
@@ -267,11 +284,14 @@ const routes: FastifyPluginAsync = async (app) => {
 
   app.get('/:id/likes', async (req) => {
     const { id } = idParam.parse(req.params);
-    await getVisiblePost(id, req.user?.id ?? null);
+    const viewerId = req.user?.id ?? null;
+    await getVisiblePost(id, viewerId);
     const rows = (await db
       .prepare('SELECT u.* FROM likes l JOIN users u ON u.id = l.user_id WHERE l.post_id = ? ORDER BY l.created_at DESC LIMIT 100')
       .all(id)) as UserRow[];
-    return { users: rows.map(userSummary) };
+    // Hide people who blocked the viewer or whom the viewer blocked (either direction).
+    const blocked = await blockedEitherIds(db, viewerId);
+    return { users: rows.filter((u) => u.id === viewerId || !blocked.has(u.id)).map(userSummary) };
   });
 
   app.get('/:id/quotes', async (req) => {

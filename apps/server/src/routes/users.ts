@@ -93,7 +93,11 @@ const routes: FastifyPluginAsync = async (app) => {
     const viewer = requireUser(req);
     const { username } = unameParam.parse(req.params);
     const u = await getUser(username);
-    if (u.id === viewer.id || await isBlockedEither(db, viewer.id, u.id)) return { vibe: null };
+    // Hide trait/closeness data from a self-view, a block either way, or a private account the
+    // viewer isn't an active follower of (same visibility as reading their content).
+    if (u.id === viewer.id || (await isBlockedEither(db, viewer.id, u.id)) || !(await canViewAuthor(db, viewer.id, u))) {
+      return { vibe: null };
+    }
     const c = compatibility(viewer, u);
     return { vibe: { score: c.score, sharedInterests: c.shared, highlights: c.highlights, traits: c.vibe } };
   });

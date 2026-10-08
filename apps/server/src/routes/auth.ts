@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { clearSessionCookie, requireUser, setSessionCookie } from '../app.js';
 import { config } from '../config.js';
 import { getDummyHash, hashPassword, hashToken, newId, newSessionToken, verifyPassword } from '../lib/crypto.js';
-import { badRequest, conflict, notFound, unauthorized } from '../lib/errors.js';
+import { badRequest, conflict, isUniqueViolation, notFound, unauthorized } from '../lib/errors.js';
 import { passwordResetMail, sendMail } from '../lib/mailer.js';
 import * as v from '../lib/validation.js';
 import { me } from '../services/users.js';
@@ -46,10 +46,18 @@ const routes: FastifyPluginAsync = async (app) => {
     }
     const id = newId();
     const now = Date.now();
-    await db.prepare(
-      `INSERT INTO users (id, username, email, password_hash, display_name, created_at, last_seen_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
-    ).run(id, body.username, body.email, await hashPassword(body.password), body.displayName, now, now);
+    try {
+      await db.prepare(
+        `INSERT INTO users (id, username, email, password_hash, display_name, created_at, last_seen_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      ).run(id, body.username, body.email, await hashPassword(body.password), body.displayName, now, now);
+    } catch (err) {
+      // Lost a race between the checks above and this INSERT.
+      if (isUniqueViolation(err, 'email')) throw conflict('An account with that email already exists', 'email_taken');
+      if (isUniqueViolation(err, 'username')) throw conflict('That username is taken', 'username_taken');
+      if (isUniqueViolation(err)) throw conflict('That username is taken', 'username_taken');
+      throw err;
+    }
     setSessionCookie(reply, await createSession(id, req));
     const user = (await db.prepare('SELECT * FROM users WHERE id = ?').get(id)) as UserRow;
     return reply.code(201).send({ user: (await me(app.ctx, user)) });
@@ -176,7 +184,12 @@ const routes: FastifyPluginAsync = async (app) => {
     if (!(await verifyPassword(body.password, user.password_hash))) throw badRequest('Password is incorrect', 'wrong_password');
     const taken = await db.prepare('SELECT id FROM users WHERE email = ? AND id != ?').get(body.email, user.id);
     if (taken) throw conflict('That email is already in use', 'email_taken');
-    await db.prepare('UPDATE users SET email = ? WHERE id = ?').run(body.email, user.id);
+    try {
+      await db.prepare('UPDATE users SET email = ? WHERE id = ?').run(body.email, user.id);
+    } catch (err) {
+      if (isUniqueViolation(err)) throw conflict('That email is already in use', 'email_taken');
+      throw err;
+    }
     return { ok: true };
   });
 

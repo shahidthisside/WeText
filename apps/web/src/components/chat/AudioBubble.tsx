@@ -35,16 +35,35 @@ export function AudioBubble({ url, durationMs, mine, seed }: { url: string; dura
   const [speed, setSpeed] = useState<(typeof SPEEDS)[number]>(1);
   const wave = useMemo(() => bars(seed), [seed]);
   const id = useId();
-  // The length the sender recorded. The audio file's own length replaces it as soon as the browser has read it.
-  const total = realLen > 0 ? realLen * 1000 : durationMs > 0 ? durationMs : 1000;
+  // The length the sender's phone measured while recording. The file's own length is used when it agrees with that.
+  // A recording whose header or clock is broken can claim to be 32 s long when it is really 3 s, so a big disagreement
+  // means the file is wrong, and the recorded length wins.
+  const recorded = durationMs > 0 ? durationMs : 0;
+  const trustFile = realLen > 0 && (recorded === 0 || Math.abs(realLen * 1000 - recorded) <= Math.max(1500, recorded * 0.5));
+  const total = trustFile ? realLen * 1000 : recorded > 0 ? recorded : realLen > 0 ? realLen * 1000 : 1000;
+  // When the file is not trusted, playback must still stop where the recording stops.
+  const stopAt = !trustFile && recorded > 0 ? recorded / 1000 : 0;
+  // Voice-note files may have been repaired on the server; a new address makes phones fetch that version once
+  // instead of reusing a damaged copy they cached earlier.
+  const src = /\.webm($|\?)/.test(url) ? `${url}${url.includes('?') ? '&' : '?'}v=2` : url;
 
   useEffect(() => {
     const el = audio.current;
     if (!el) return;
     const length = () => (el.duration && Number.isFinite(el.duration) ? el.duration : 0);
     const onTime = () => {
-      // Always show the real playback position, so the timer moves from the very first moment it plays.
-      const d = length() || total / 1000;
+      // Past the recorded end of a file that over-reports its length: stop here, as if the clip had ended.
+      if (stopAt > 0 && el.currentTime >= stopAt) {
+        el.pause();
+        el.currentTime = 0;
+        setIsPlaying(false);
+        setPos(0);
+        setNow(0);
+        if (playing.current === el) playing.current = null;
+        return;
+      }
+      // Otherwise show the real playback position, so the timer moves from the very first moment it plays.
+      const d = stopAt > 0 ? stopAt : length() || total / 1000;
       setNow(el.currentTime);
       setPos(d ? Math.min(1, el.currentTime / d) : 0);
     };
@@ -66,7 +85,6 @@ export function AudioBubble({ url, durationMs, mine, seed }: { url: string; dura
     el.addEventListener('ended', onEnd);
     el.addEventListener('pause', onPause);
     el.addEventListener('play', onPlay);
-    // A voice note recorded in a browser often has no length in its header: ask for the real one by seeking far ahead once.
     onMeta();
     return () => {
       el.removeEventListener('timeupdate', onTime);
@@ -76,7 +94,7 @@ export function AudioBubble({ url, durationMs, mine, seed }: { url: string; dura
       el.removeEventListener('pause', onPause);
       el.removeEventListener('play', onPlay);
     };
-  }, [total]);
+  }, [total, stopAt]);
 
   function toggle() {
     const el = audio.current;
@@ -102,7 +120,7 @@ export function AudioBubble({ url, durationMs, mine, seed }: { url: string; dura
 
   return (
     <div className={cn('flex items-center gap-2.5 px-3 py-2.5', mine ? 'text-on-accent' : 'text-fg')}>
-      <audio ref={audio} src={url} preload="metadata" aria-label="Voice message" />
+      <audio ref={audio} src={src} preload="metadata" aria-label="Voice message" />
       <button
         type="button"
         onClick={toggle}

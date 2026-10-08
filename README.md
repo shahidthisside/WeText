@@ -12,7 +12,7 @@
 ![React](https://img.shields.io/badge/react-19-149eca)
 ![Fastify](https://img.shields.io/badge/fastify-5-000000)
 ![libSQL](https://img.shields.io/badge/sqlite%2FTurso-FTS5-003b57)
-![Tests](https://img.shields.io/badge/tests-159%20passing-2ea44f)
+![Tests](https://img.shields.io/badge/tests-160%20passing-2ea44f)
 [![License: Proprietary](https://img.shields.io/badge/license-proprietary-red)](LICENSE)
 
 [Live site](https://wetextapp.onrender.com) · [Features](#features) · [Quick start](#quick-start) · [Architecture](#architecture) · [API](#api-overview) · [Security](#security) · [Deployment](#deployment)
@@ -121,7 +121,7 @@ Run these from the repository root.
 | `npm run dev` | Starts the API (tsx watch) and Vite, proxying `/api`, `/uploads` and `/socket.io` |
 | `npm run build` | Builds the web app and compiles the server |
 | `npm start` | Production: one Node process serves the API, websockets and the built web app |
-| `npm test` | Runs the server test suite (159 tests) |
+| `npm test` | Runs the server test suite (160 tests) |
 | `npm run typecheck` | Type-checks both workspaces |
 
 ## Configuration
@@ -226,7 +226,7 @@ Socket.IO authenticates with the same session cookie. The server pushes these ev
 npm test
 ```
 
-159 integration tests cover authentication, post visibility and privacy rules, search, matching, moods, prompts, fading notes, whispers, edit history, reports and data export, every chat feature (edit, forward, star, pin, archive, disappearing messages, voice uploads and range requests, shared notes), group chats (members, roles, history cutoff, leaving), socket events, photo storage, the database adapter, concurrency races and password reset. They run against a temporary database and need no setup.
+160 integration tests cover authentication, post visibility and privacy rules, search, matching, moods, prompts, fading notes, whispers, edit history, reports and data export, every chat feature (edit, forward, star, pin, archive, disappearing messages, voice uploads and range requests, shared notes), group chats (members, roles, history cutoff, leaving), socket events, photo storage, the database adapter, concurrency races and password reset. They run against a temporary database and need no setup.
 
 To run them against a real libSQL server instead (the same protocol Turso uses), start one and point the tests at it:
 

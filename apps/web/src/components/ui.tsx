@@ -117,7 +117,17 @@ export function Avatar({
   className?: string;
   anonymous?: boolean;
 }) {
+  const [imgFailed, setImgFailed] = useState(false);
   const dot = Math.max(8, Math.round(size * 0.26));
+  const initials = (user?.displayName ?? '')
+    .split(/\s+/)
+    .map((w) => w[0])
+    .filter(Boolean)
+    .join('')
+    .slice(0, 2)
+    .toUpperCase();
+  const colorKey = user?.username || user?.displayName || '?';
+
   let inner: ReactNode;
   if (anonymous || !user) {
     inner = (
@@ -127,19 +137,22 @@ export function Avatar({
         </svg>
       </div>
     );
-  } else if (user.avatarUrl) {
-    inner = <img src={user.avatarUrl} alt="" className="size-full rounded-[36%] object-cover" loading="lazy" draggable={false} />;
+  } else if (user.avatarUrl && !imgFailed) {
+    inner = (
+      <img
+        src={user.avatarUrl}
+        alt=""
+        className="size-full rounded-[36%] object-cover"
+        loading="lazy"
+        draggable={false}
+        onError={() => setImgFailed(true)}
+      />
+    );
   } else {
-    const initials = user.displayName
-      .split(/\s+/)
-      .map((w) => w[0])
-      .join('')
-      .slice(0, 2)
-      .toUpperCase();
     inner = (
       <div
         className="flex size-full items-center justify-center rounded-[36%] font-display font-bold text-white"
-        style={{ background: PALETTE[hash(user.username) % PALETTE.length], fontSize: size * 0.38 }}
+        style={{ background: PALETTE[hash(colorKey) % PALETTE.length], fontSize: size * 0.38 }}
         aria-hidden
       >
         {initials || '?'}
@@ -212,6 +225,7 @@ export function Modal({
             className,
           )}
           aria-describedby={undefined}
+          onClick={(e) => e.stopPropagation()}
         >
           {hideHeader ? (
             <Dialog.Title className="sr-only">{title}</Dialog.Title>
@@ -259,6 +273,7 @@ export function ConfirmDialog({
         <Dialog.Content
           className="fixed left-1/2 top-1/2 z-[60] w-[calc(100%-2rem)] max-w-[340px] -translate-x-1/2 -translate-y-1/2 rounded-[28px] border border-line bg-card p-7 shadow-2xl outline-none animate-sheet"
           aria-describedby={undefined}
+          onClick={(e) => e.stopPropagation()}
         >
           <Dialog.Title className="text-xl font-bold">{title}</Dialog.Title>
           <div className="mt-2 text-[0.9375rem] text-fg-muted">{body}</div>
@@ -289,7 +304,7 @@ export function MenuContent({ children, align = 'end' }: { children: ReactNode; 
       <DM.Content
         align={align}
         sideOffset={4}
-        className="z-50 min-w-[220px] overflow-hidden rounded-2xl border border-line bg-card p-1.5 shadow-[0_16px_40px_-12px_rgb(0_0_0/0.25)] animate-fade-in"
+        className="z-[60] min-w-[220px] overflow-hidden rounded-2xl border border-line bg-card p-1.5 shadow-[0_16px_40px_-12px_rgb(0_0_0/0.25)] animate-fade-in"
         onClick={(e) => e.stopPropagation()}
       >
         {children}

@@ -51,15 +51,51 @@ function deepMap(v: unknown, id: string, fn: (p: Post) => Post | null): unknown 
   return v;
 }
 
-export function updatePostEverywhere(id: string, fn: (p: Post) => Post | null) {
-  queryClient.setQueriesData({ predicate: () => true }, (data: unknown) => (data === undefined ? data : deepMap(data, id, fn)));
+/**
+ * Query keys whose cached data can contain Post objects. `updatePostEverywhere`
+ * only walks these so unrelated caches (conversations, messages, sessions,
+ * follow lists, vibe, meta, counts, trending-tags...) are never touched.
+ * Keys are matched on their first segment.
+ */
+const POST_BEARING_KEYS = new Set([
+  'feed', // for-you / following / whispers / tag / prompt feeds
+  'post', // a single thread (post + ancestors)
+  'replies', // a post's replies
+  'profile-posts', // a profile's posts/replies/media/likes/whispers
+  'bookmarks', // saved notes
+  'notifications', // activity items carry a post
+  'search', // search feed results
+  'trending', // (tags only, but harmless to include; no posts dropped)
+]);
+
+function touchesPosts(key: QueryKey): boolean {
+  const first = Array.isArray(key) ? key[0] : key;
+  return typeof first === 'string' && POST_BEARING_KEYS.has(first);
 }
 
-/** Prepend an item to the first page of an infinite list query if it's cached. */
-export function prependToInfinite<T>(key: QueryKey, item: T) {
-  queryClient.setQueryData(key, (data: { pages: { items: T[] }[]; pageParams: unknown[] } | undefined) => {
+export function updatePostEverywhere(id: string, fn: (p: Post) => Post | null) {
+  queryClient.setQueriesData({ predicate: (q) => touchesPosts(q.queryKey) }, (data: unknown) => (data === undefined ? data : deepMap(data, id, fn)));
+}
+
+type InfinitePage<T> = { items: T[]; nextCursor?: string | null };
+type InfiniteData<T> = { pages: InfinitePage<T>[]; pageParams: unknown[] };
+
+/**
+ * Prepend items to the first page of an infinite list query, if it's cached.
+ * Safe against an empty `pages: []` (seeds a first page) and de-dupes by `key`.
+ */
+export function prependToInfinite<T extends { key?: string; id?: string }>(key: QueryKey, items: T[]) {
+  if (!items.length) return;
+  queryClient.setQueryData<InfiniteData<T>>(key, (data) => {
     if (!data) return data;
+    const idOf = (x: T) => x.key ?? x.id;
+    if (!data.pages.length) {
+      return { ...data, pages: [{ items, nextCursor: null }], pageParams: [null] };
+    }
     const [first, ...rest] = data.pages;
-    return { ...data, pages: [{ ...first!, items: [item, ...first!.items] }, ...rest] };
+    const existing = new Set(first!.items.map(idOf));
+    const fresh = items.filter((x) => !existing.has(idOf(x)));
+    if (!fresh.length) return data;
+    return { ...data, pages: [{ ...first!, items: [...fresh, ...first!.items] }, ...rest] };
   });
 }

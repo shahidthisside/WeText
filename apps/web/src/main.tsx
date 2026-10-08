@@ -4,6 +4,8 @@ import { createRoot } from 'react-dom/client';
 import { RouterProvider } from 'react-router';
 import { Toaster } from 'sonner';
 import './index.css';
+import { ErrorBoundary } from './components/ErrorBoundary';
+import { OfflineBanner } from './components/OfflineBanner';
 import { queryClient } from './lib/query';
 import { router } from './router';
 import { usePrefs } from './lib/prefs';
@@ -31,9 +33,12 @@ function Toasts() {
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <QueryClientProvider client={queryClient}>
-      <RouterProvider router={router} />
-      <Toasts />
-    </QueryClientProvider>
+    <ErrorBoundary>
+      <QueryClientProvider client={queryClient}>
+        <RouterProvider router={router} />
+        <OfflineBanner />
+        <Toasts />
+      </QueryClientProvider>
+    </ErrorBoundary>
   </StrictMode>,
 );

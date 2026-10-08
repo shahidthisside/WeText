@@ -6,8 +6,14 @@ const MIN = 60_000;
 const HOUR = 60 * MIN;
 const DAY = 24 * HOUR;
 
+/** A timestamp we can turn into a date. Rejects NaN, Infinity, null, undefined. */
+function isValidTs(ts: unknown): ts is number {
+  return typeof ts === 'number' && Number.isFinite(ts);
+}
+
 /** Compact relative time: "now", "5m", "3h", "Mar 4", "Mar 4, 2024". */
 export function shortTime(ts: number, now = Date.now()) {
+  if (!isValidTs(ts)) return '';
   const d = now - ts;
   if (d < MIN) return 'now';
   if (d < HOUR) return `${Math.floor(d / MIN)}m`;
@@ -19,6 +25,7 @@ export function shortTime(ts: number, now = Date.now()) {
 }
 
 export function fullTime(ts: number) {
+  if (!isValidTs(ts)) return '';
   const d = new Date(ts);
   return `${d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })} · ${d.toLocaleDateString(undefined, {
     month: 'short',
@@ -28,10 +35,12 @@ export function fullTime(ts: number) {
 }
 
 export function clockTime(ts: number) {
+  if (!isValidTs(ts)) return '';
   return new Date(ts).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
 }
 
 export function dayLabel(ts: number) {
+  if (!isValidTs(ts)) return '';
   const d = new Date(ts);
   const today = new Date();
   const yest = new Date(Date.now() - DAY);
@@ -41,7 +50,7 @@ export function dayLabel(ts: number) {
 }
 
 export function lastSeen(ts: number | null | undefined) {
-  if (!ts) return null;
+  if (!isValidTs(ts)) return null;
   const d = Date.now() - ts;
   if (d < 2 * MIN) return 'Active just now';
   if (d < HOUR) return `Active ${Math.floor(d / MIN)}m ago`;
@@ -62,6 +71,7 @@ export function plural(n: number, one: string, many = `${one}s`) {
 }
 
 export function timeLeft(endsAt: number) {
+  if (!isValidTs(endsAt)) return '';
   const d = endsAt - Date.now();
   if (d <= 0) return 'Final results';
   if (d < HOUR) return `${Math.ceil(d / MIN)} minutes left`;

@@ -8,6 +8,15 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * Called whenever the API answers 401 (session expired / signed out elsewhere).
+ * Registered once by the app shell to clear the cache and bounce to /login.
+ */
+let onUnauthorized: (() => void) | null = null;
+export function setUnauthorizedHandler(fn: (() => void) | null) {
+  onUnauthorized = fn;
+}
+
 async function request<T>(method: string, url: string, body?: unknown): Promise<T> {
   const init: RequestInit = { method, credentials: 'same-origin', headers: {} };
   if (body instanceof FormData) {
@@ -26,6 +35,11 @@ async function request<T>(method: string, url: string, body?: unknown): Promise<
   const data = text ? safeJson(text) : null;
   if (!res.ok) {
     const d = data as { error?: string; code?: string } | null;
+    // Session no longer valid: let the app clear state and redirect. The
+    // auth endpoints handle their own 401s (bad password etc.) in-form.
+    if (res.status === 401 && !url.startsWith('/auth/') && onUnauthorized) {
+      onUnauthorized();
+    }
     throw new ApiError(res.status, d?.error ?? `Request failed (${res.status})`, d?.code);
   }
   return data as T;

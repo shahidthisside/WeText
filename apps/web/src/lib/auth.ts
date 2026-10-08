@@ -11,7 +11,7 @@ export function useMe() {
     queryFn: () => api.get<{ user: Me | null }>('/auth/me').then((r) => r.user),
     staleTime: 5 * 60_000,
   });
-  return { me: q.data ?? null, loading: q.isPending };
+  return { me: q.data ?? null, loading: q.isPending, error: q.isError ? q.error : null, refetch: () => q.refetch() };
 }
 
 /** Use inside authenticated routes only. */
@@ -22,6 +22,16 @@ export function useAuthedMe(): Me {
 }
 
 export function setMe(user: Me | null) {
+  queryClient.setQueryData(meKey, user);
+}
+
+/**
+ * Wipe every cached query except the one holding the given user, then seed it.
+ * Called on successful login/signup so a previous identity's feeds, profiles
+ * and messages never leak into the new session.
+ */
+export function setIdentity(user: Me) {
+  queryClient.clear();
   queryClient.setQueryData(meKey, user);
 }
 

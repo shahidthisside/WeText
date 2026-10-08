@@ -49,9 +49,11 @@ export function useDeletePost() {
 }
 
 export async function votePoll(post: Post, optionId: string) {
+  // Already voted or poll missing: nothing to do.
+  if (!post.poll || post.poll.myVote) return;
   // Optimistic vote
   updatePostEverywhere(post.id, (p) =>
-    p.poll
+    p.poll && !p.poll.myVote
       ? {
           ...p,
           poll: {
@@ -67,7 +69,23 @@ export async function votePoll(post: Post, optionId: string) {
     const r = await api.post<{ post: Post }>(`/posts/${post.id}/vote`, { optionId });
     updatePostEverywhere(post.id, () => r.post);
   } catch (e) {
-    updatePostEverywhere(post.id, () => post);
+    // Re-apply the inverse of the optimistic change rather than restoring a
+    // captured (possibly stale) copy of the whole post.
+    updatePostEverywhere(post.id, (p) =>
+      p.poll && p.poll.myVote === optionId
+        ? {
+            ...p,
+            poll: {
+              ...p.poll,
+              myVote: null,
+              totalVotes: Math.max(0, p.poll.totalVotes - 1),
+              options: p.poll.options.map((o) => (o.id === optionId ? { ...o, votes: Math.max(0, o.votes - 1) } : o)),
+            },
+          }
+        : p,
+    );
+    // And refetch any thread/feed that holds this post to converge on the truth.
+    queryClient.invalidateQueries({ queryKey: ['post', post.id] });
     toast.error(errorMessage(e));
   }
 }
@@ -83,5 +101,26 @@ export async function copyLink(p: Pick<Post, 'id'>) {
     toast('Link copied to clipboard');
   } catch {
     toast.error('Couldn’t copy link');
+  }
+}
+
+/** Copy a note's text to the clipboard. */
+export async function copyText(p: Pick<Post, 'content'>) {
+  try {
+    await navigator.clipboard.writeText(p.content ?? '');
+    toast('Text copied');
+  } catch {
+    toast.error('Couldn’t copy text');
+  }
+}
+
+/** Share a note via the Web Share API on touch devices, else copy the link. */
+export function shareOrCopyLink(p: Pick<Post, 'id'>) {
+  const url = `${window.location.origin}${postUrl(p)}`;
+  const nav = navigator as Navigator & { share?: (data: ShareData) => Promise<void> };
+  if (typeof nav.share === 'function' && matchMedia('(pointer: coarse)').matches) {
+    nav.share({ url }).catch(() => {});
+  } else {
+    copyLink(p);
   }
 }

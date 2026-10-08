@@ -3,6 +3,7 @@ import { ArrowRight, Check, PenLine, VenetianMask } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router';
 import { InfiniteFeed } from '../components/Feed';
+import { LiveFeed } from '../components/LiveFeed';
 import { GETTING_STARTED_DISMISSED, GettingStarted } from '../components/GettingStarted';
 import { TrendingList, useTrending } from '../components/Sidebar';
 import { useFlag } from '../lib/flags';
@@ -15,6 +16,7 @@ import { setPrefs, usePrefs } from '../lib/prefs';
 import type { DailyPrompt } from '../lib/types';
 import { cn } from '../lib/utils';
 import { InviteButton } from '../components/Invite';
+import { useDocumentTitle } from '../lib/useDocumentTitle';
 
 type Tab = 'foryou' | 'following' | 'whispers';
 
@@ -117,6 +119,7 @@ function MoodStrip({ value, onChange }: { value: string | null; onChange: (m: st
 export default function Home() {
   const prefs = usePrefs();
   const me = useAuthedMe();
+  useDocumentTitle('Home');
   const [tab, setTab] = useState<Tab>(prefs.homeTab);
   const [mood, setMood] = useState<string | null>(null);
   const dismissed = useFlag(GETTING_STARTED_DISMISSED);
@@ -175,7 +178,7 @@ export default function Home() {
       <MoodStrip value={mood} onChange={setMood} />
 
       {tab === 'foryou' && (
-        <InfiniteFeed
+        <LiveFeed
           key={`foryou-${mood}`}
           masonry
           queryKey={['feed', 'foryou', mood]}
@@ -191,7 +194,7 @@ export default function Home() {
         />
       )}
       {tab === 'following' && (
-        <InfiniteFeed
+        <LiveFeed
           key={`following-${mood}`}
           masonry
           queryKey={['feed', 'following', mood]}

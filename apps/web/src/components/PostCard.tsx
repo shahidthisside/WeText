@@ -1,5 +1,5 @@
 import { Hourglass, MessageSquareQuote, Repeat2, VenetianMask } from 'lucide-react';
-import { memo } from 'react';
+import { memo, type KeyboardEvent } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { useMe } from '../lib/auth';
 import { postUrl } from '../lib/posts';
@@ -8,6 +8,7 @@ import { MoodChip } from '../lib/moods';
 import { cn, compact, fullTime, shortTime } from '../lib/utils';
 import { MediaGrid } from './Media';
 import { AuthorLine, PollView, PostActions, PostMenu, QuoteEmbed } from './PostParts';
+import { CardBoundary } from './ErrorBoundary';
 import { RichText } from './RichText';
 import { Avatar, VerifiedLock } from './ui';
 import { EditedLabel } from './EditHistory';
@@ -59,12 +60,23 @@ function NoteCard({ post, repostedBy, threadLine, hideReplyContext }: PostCardPr
     if (window.getSelection()?.toString()) return;
     navigate(postUrl(post));
   };
+  const onKeyDown = (e: KeyboardEvent<HTMLElement>) => {
+    // Only act on the card itself, and never when focus is on an inner control.
+    if (e.target !== e.currentTarget) return;
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      navigate(postUrl(post));
+    }
+  };
   const short = post.content.length < 90 && !post.media.length && !post.poll && !post.quote;
   return (
     <article
       onClick={open}
-      aria-label={`Note by ${post.author?.displayName ?? 'someone'}`}
-      className="group relative cursor-pointer rounded-[var(--radius-card)] border border-line bg-card p-4 shadow-paper transition-all duration-200 hover:-translate-y-0.5 hover:border-line-strong hover:shadow-[0_14px_34px_-16px_rgb(0_0_0/0.3)]"
+      onKeyDown={onKeyDown}
+      role="link"
+      tabIndex={0}
+      aria-label={`Note by ${post.author?.displayName ?? 'someone'}. Press Enter to open.`}
+      className="group relative cursor-pointer rounded-[var(--radius-card)] border border-line bg-card p-4 shadow-paper outline-none transition-all duration-200 hover:-translate-y-0.5 hover:border-line-strong hover:shadow-[0_14px_34px_-16px_rgb(0_0_0/0.3)] focus-visible:ring-2 focus-visible:ring-accent"
     >
       {threadLine && <span className="absolute -bottom-4 left-[33px] h-4 w-0.5 bg-line-strong" aria-hidden />}
       {repostedBy && <RepostedBy by={repostedBy} />}
@@ -147,12 +159,22 @@ function WhisperCard({ post, repostedBy }: PostCardProps) {
     if (window.getSelection()?.toString()) return;
     navigate(postUrl(post));
   };
+  const onKeyDown = (e: KeyboardEvent<HTMLElement>) => {
+    if (e.target !== e.currentTarget) return;
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      navigate(postUrl(post));
+    }
+  };
   const long = post.content.length > 220;
   return (
     <article
       onClick={open}
-      aria-label="Whisper"
-      className="relative cursor-pointer overflow-hidden rounded-[var(--radius-card)] bg-whisper p-5 text-on-whisper shadow-paper transition-all duration-200 hover:-translate-y-0.5"
+      onKeyDown={onKeyDown}
+      role="link"
+      tabIndex={0}
+      aria-label="Whisper. Press Enter to open."
+      className="relative cursor-pointer overflow-hidden rounded-[var(--radius-card)] bg-whisper p-5 text-on-whisper shadow-paper outline-none transition-all duration-200 hover:-translate-y-0.5 focus-visible:ring-2 focus-visible:ring-accent"
     >
       {repostedBy && <RepostedBy by={repostedBy} onDark />}
       <div className="relative flex items-center gap-2 text-[0.75rem] font-semibold uppercase tracking-[0.14em] text-on-whisper-muted">
@@ -278,7 +300,9 @@ export function FeedList({ items }: { items: FeedItem[] }) {
   return (
     <div className="flex flex-col gap-4">
       {items.map((i) => (
-        <PostCard key={i.key} post={i.post} repostedBy={i.repostedBy} />
+        <CardBoundary key={i.key} label="This note couldn’t be shown.">
+          <PostCard post={i.post} repostedBy={i.repostedBy} />
+        </CardBoundary>
       ))}
     </div>
   );
@@ -290,7 +314,9 @@ export function MasonryList({ items, narrow }: { items: FeedItem[]; narrow?: boo
     <div className={narrow ? 'masonry columns-1 md:columns-2' : 'masonry columns-1 md:columns-2 xl:columns-3'}>
       {items.map((i, n) => (
         <div key={i.key} className="animate-rise" style={{ animationDelay: `${Math.min(n, 8) * 40}ms` }}>
-          <PostCard post={i.post} repostedBy={i.repostedBy} tile />
+          <CardBoundary label="This note couldn’t be shown.">
+            <PostCard post={i.post} repostedBy={i.repostedBy} tile />
+          </CardBoundary>
         </div>
       ))}
     </div>

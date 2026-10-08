@@ -11,6 +11,8 @@ import { setPrefs, usePrefs, type Accent, type Size, type Theme } from '../lib/p
 import { queryClient } from '../lib/query';
 import type { Me, UserSummary } from '../lib/types';
 import { cn, shortTime } from '../lib/utils';
+import { useDocumentTitle } from '../lib/useDocumentTitle';
+import { Download } from 'lucide-react';
 
 type Section = 'account' | 'privacy' | 'display' | 'security' | 'blocked';
 
@@ -24,6 +26,7 @@ const SECTIONS: { key: Section; label: string; desc: string; icon: typeof User }
 
 export default function Settings() {
   const { section } = useParams<{ section?: Section }>();
+  useDocumentTitle(section ? `Settings · ${SECTIONS.find((s) => s.key === section)?.label ?? ''}` : 'Settings');
   const active = SECTIONS.find((s) => s.key === section) ?? (typeof window !== 'undefined' && window.matchMedia('(min-width: 768px)').matches ? SECTIONS[2] : undefined);
   return (
     <div className="mx-auto max-w-[1020px]">
@@ -144,6 +147,11 @@ function AccountSettings() {
           )}
         </form>
       </Group>
+      <Group title="Your data" footer="Download a copy of your account: your profile, posts, messages and more, as JSON.">
+        <div className="px-4 py-2">
+          <DownloadData />
+        </div>
+      </Group>
       <Group title="Delete account" footer="This permanently deletes your profile, posts, likes, messages and everything else. It can’t be undone.">
         <div className="space-y-3 px-4 py-2">
           <TextInput label="Password" type="password" value={delPw} onChange={(e) => setDelPw(e.target.value)} autoComplete="current-password" />
@@ -162,6 +170,41 @@ function AccountSettings() {
         onConfirm={() => del.mutate()}
       />
     </>
+  );
+}
+
+/* ---------------------------------------------------------------- Download data */
+
+function DownloadData() {
+  const [busy, setBusy] = useState(false);
+  async function download() {
+    setBusy(true);
+    try {
+      const res = await fetch('/api/me/export', { credentials: 'same-origin' });
+      if (!res.ok) {
+        if (res.status === 404) throw new Error('Data export isn’t available yet. Please try again later.');
+        throw new Error(`Export failed (${res.status})`);
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `wetext-export-${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      toast('Your data is downloading');
+    } catch (e) {
+      toast.error(errorMessage(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <Button variant="outline" onClick={download} loading={busy}>
+      <Download className="size-4" /> Download my data
+    </Button>
   );
 }
 

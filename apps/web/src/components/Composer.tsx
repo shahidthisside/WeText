@@ -1,9 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
 import { BarChart3, Hourglass, ImagePlus, Plus, Smile, VenetianMask, X } from 'lucide-react';
-import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { api, errorMessage, uploadImage, type Uploaded } from '../lib/api';
 import { useAuthedMe } from '../lib/auth';
+import { clearDraft, draftContext, loadDraft, saveDraft } from '../lib/drafts';
 import { queryClient, updatePostEverywhere } from '../lib/query';
 import type { DailyPrompt, Post, UserSummary } from '../lib/types';
 import { MOODS } from '../lib/moods';
@@ -12,12 +13,14 @@ import { Avatar, Button, IconButton, Spinner } from './ui';
 import { QuoteEmbed } from './PostCard';
 
 const MAX = 500;
+const ALT_MAX = 300;
 
 interface Attachment {
   id: string;
   preview: string;
   uploaded?: Uploaded;
   error?: boolean;
+  alt: string;
 }
 
 export interface ComposerProps {
@@ -35,12 +38,17 @@ export interface ComposerProps {
 
 export function Composer({ replyTo, quote, edit, prompt, startWhisper, autoFocus, variant = 'modal', placeholder, onDone }: ComposerProps) {
   const me = useAuthedMe();
-  const [text, setText] = useState(edit?.content ?? '');
+  const ctx = draftContext({ replyToId: replyTo?.id, quoteId: quote?.id, isEdit: !!edit });
+  // Restore a persisted draft once, for new notes / replies / quotes (never edits).
+  const [initialText] = useState(() => (edit ? edit.content : (ctx && loadDraft(ctx)) || ''));
+  const [draftRestored, setDraftRestored] = useState(() => !edit && !!ctx && !!loadDraft(ctx));
+  const [text, setText] = useState(initialText);
   const [anon, setAnon] = useState(!!startWhisper);
   const [mood, setMood] = useState<string | null>(edit?.mood ?? null);
   const [fade, setFade] = useState(false);
   const [showMoods, setShowMoods] = useState(false);
   const [files, setFiles] = useState<Attachment[]>([]);
+  const [altEditing, setAltEditing] = useState<string | null>(null);
   const [poll, setPoll] = useState<string[] | null>(null);
   const [pollHours, setPollHours] = useState(24);
   const [submitting, setSubmitting] = useState(false);
@@ -49,6 +57,16 @@ export function Composer({ replyTo, quote, edit, prompt, startWhisper, autoFocus
   const fileInput = useRef<HTMLInputElement>(null);
   const [caret, setCaret] = useState(0);
   const inputId = useId();
+
+  // Track every object URL we create so we can revoke them exactly once on
+  // unmount regardless of how attachments were added, replaced or removed.
+  const objectUrls = useRef<Set<string>>(new Set());
+  const revoke = useCallback((url: string) => {
+    if (objectUrls.current.has(url)) {
+      URL.revokeObjectURL(url);
+      objectUrls.current.delete(url);
+    }
+  }, []);
 
   // Auto-grow textarea
   useLayoutEffect(() => {
@@ -66,7 +84,21 @@ export function Composer({ replyTo, quote, edit, prompt, startWhisper, autoFocus
     }
   }, [autoFocus]);
 
-  useEffect(() => () => files.forEach((f) => URL.revokeObjectURL(f.preview)), []); // eslint-disable-line react-hooks/exhaustive-deps
+  // Persist the draft text (debounced). Attachments/polls/moods are not saved.
+  useEffect(() => {
+    if (!ctx) return;
+    const h = setTimeout(() => saveDraft(ctx, text), 400);
+    return () => clearTimeout(h);
+  }, [ctx, text]);
+
+  // Revoke every object URL this composer created when it unmounts.
+  useEffect(() => {
+    const urls = objectUrls.current;
+    return () => {
+      for (const u of urls) URL.revokeObjectURL(u);
+      urls.clear();
+    };
+  }, []);
 
   const uploading = files.some((f) => !f.uploaded && !f.error);
   const len = [...text.trim()].length;
@@ -74,6 +106,22 @@ export function Composer({ replyTo, quote, edit, prompt, startWhisper, autoFocus
   const pollValid = !poll || poll.filter((o) => o.trim()).length >= 2;
   const canSubmit =
     !submitting && !uploading && !over && pollValid && (len > 0 || files.some((f) => f.uploaded) || !!quote) && !(poll && len === 0);
+
+  function removeAttachment(id: string) {
+    setFiles((fs) => {
+      const target = fs.find((f) => f.id === id);
+      if (target) revoke(target.preview);
+      return fs.filter((f) => f.id !== id);
+    });
+    setAltEditing((cur) => (cur === id ? null : cur));
+  }
+
+  function discardDraft() {
+    setText('');
+    setDraftRestored(false);
+    if (ctx) clearDraft(ctx);
+    ta.current?.focus();
+  }
 
   async function addFiles(list: FileList | File[]) {
     const arr = [...list].filter((f) => f.type.startsWith('image/'));
@@ -84,13 +132,16 @@ export function Composer({ replyTo, quote, edit, prompt, startWhisper, autoFocus
         toast.error(`${file.name} is larger than 8 MB`);
         continue;
       }
-      const att: Attachment = { id: crypto.randomUUID(), preview: URL.createObjectURL(file) };
+      const preview = URL.createObjectURL(file);
+      objectUrls.current.add(preview);
+      const att: Attachment = { id: crypto.randomUUID(), preview, alt: '' };
       setFiles((f) => [...f, att]);
       setPoll(null);
       uploadImage(file, 'media')
         .then((uploaded) => setFiles((fs) => fs.map((f) => (f.id === att.id ? { ...f, uploaded } : f))))
         .catch((e) => {
           toast.error(errorMessage(e));
+          revoke(preview);
           setFiles((fs) => fs.filter((f) => f.id !== att.id));
         });
     }
@@ -115,7 +166,7 @@ export function Composer({ replyTo, quote, edit, prompt, startWhisper, autoFocus
             promptKey: prompt?.key,
             replyToId: replyTo?.id,
             quoteOfId: quote?.id,
-            media: files.filter((f) => f.uploaded).map((f) => ({ ...f.uploaded!, alt: '' })),
+            media: files.filter((f) => f.uploaded).map((f) => ({ ...f.uploaded!, alt: f.alt.trim().slice(0, ALT_MAX) })),
             poll: poll ? { options: poll.map((o) => o.trim()).filter(Boolean), durationHours: pollHours } : null,
           })
         ).post;
@@ -134,11 +185,16 @@ export function Composer({ replyTo, quote, edit, prompt, startWhisper, autoFocus
         });
       }
       setText('');
-      setFiles([]);
+      setFiles((fs) => {
+        fs.forEach((f) => revoke(f.preview));
+        return [];
+      });
       setPoll(null);
       setAnon(false);
       setMood(null);
       setFade(false);
+      setDraftRestored(false);
+      if (ctx) clearDraft(ctx);
       onDone?.(post);
     } catch (e) {
       toast.error(errorMessage(e));
@@ -186,6 +242,14 @@ export function Composer({ replyTo, quote, edit, prompt, startWhisper, autoFocus
           Replying to <span className="font-semibold text-accent">{replyTo.author ? `@${replyTo.author.username}` : 'a whisper'}</span>
         </p>
       )}
+      {draftRestored && (
+        <div className="mb-2 flex items-center justify-between gap-3 rounded-xl bg-bg-muted px-3 py-2 text-[0.8125rem] text-fg-muted">
+          <span>Draft restored</span>
+          <button type="button" className="font-semibold text-danger hover:underline" onClick={discardDraft}>
+            Discard
+          </button>
+        </div>
+      )}
 
       <div className={cn('rounded-[22px] transition-colors', whisperMode ? 'bg-whisper p-4 text-on-whisper' : variant === 'inline' ? 'border border-line bg-card p-4 shadow-paper' : 'bg-bg-muted/60 p-4')}>
         <div className="flex gap-3">
@@ -208,6 +272,7 @@ export function Composer({ replyTo, quote, edit, prompt, startWhisper, autoFocus
                 setText(e.target.value);
                 setCaret(e.target.selectionStart);
                 setMentionIdx(0);
+                if (draftRestored) setDraftRestored(false);
               }}
               onSelect={(e) => setCaret((e.target as HTMLTextAreaElement).selectionStart)}
               onFocus={() => setFocused(true)}
@@ -266,8 +331,8 @@ export function Composer({ replyTo, quote, edit, prompt, startWhisper, autoFocus
         {files.length > 0 && (
           <div className={cn('mt-3 grid gap-2', files.length === 1 ? 'grid-cols-1' : 'grid-cols-2')}>
             {files.map((f) => (
-              <div key={f.id} className="relative overflow-hidden rounded-2xl">
-                <img src={f.preview} alt="" className={cn('w-full object-cover', files.length === 1 ? 'max-h-[320px]' : 'aspect-square')} />
+              <div key={f.id} className="relative min-h-[120px] overflow-hidden rounded-2xl bg-bg-muted">
+                <img src={f.preview} alt={f.alt.trim() || ''} className={cn('w-full object-cover', files.length === 1 ? 'max-h-[320px] min-h-[120px]' : 'aspect-square')} />
                 {!f.uploaded && (
                   <div className="absolute inset-0 flex items-center justify-center bg-black/35 text-white">
                     <Spinner />
@@ -275,12 +340,48 @@ export function Composer({ replyTo, quote, edit, prompt, startWhisper, autoFocus
                 )}
                 <button
                   type="button"
-                  aria-label="Remove image"
-                  className="absolute right-2 top-2 flex size-8 items-center justify-center rounded-full bg-black/70 text-white hover:bg-black/85"
-                  onClick={() => setFiles((fs) => fs.filter((x) => x.id !== f.id))}
+                  aria-label="Remove photo"
+                  className="absolute right-2 top-2 flex size-11 items-center justify-center rounded-full bg-black/70 text-white hover:bg-black/85"
+                  onClick={() => removeAttachment(f.id)}
                 >
                   <X className="size-4" />
                 </button>
+                <button
+                  type="button"
+                  aria-label={f.alt.trim() ? 'Edit photo description' : 'Add a description for this photo'}
+                  onClick={() => setAltEditing((cur) => (cur === f.id ? null : f.id))}
+                  className={cn(
+                    'absolute bottom-2 left-2 flex h-7 items-center rounded-full px-2 text-[0.6875rem] font-bold uppercase tracking-wide',
+                    f.alt.trim() ? 'bg-accent text-on-accent' : 'bg-black/70 text-white hover:bg-black/85',
+                  )}
+                >
+                  {f.alt.trim() ? 'Alt ✓' : '+ Alt'}
+                </button>
+                {altEditing === f.id && (
+                  <div className="absolute inset-x-0 bottom-0 bg-black/80 p-2.5">
+                    <label htmlFor={`alt-${f.id}`} className="sr-only">
+                      Describe this photo for people who can’t see it
+                    </label>
+                    <textarea
+                      id={`alt-${f.id}`}
+                      autoFocus
+                      rows={2}
+                      maxLength={ALT_MAX}
+                      value={f.alt}
+                      placeholder="Describe this photo for people who can’t see it…"
+                      onChange={(e) => setFiles((fs) => fs.map((x) => (x.id === f.id ? { ...x, alt: e.target.value } : x)))}
+                      className="w-full resize-none rounded-lg bg-white/95 p-2 text-[0.8125rem] text-black outline-none"
+                    />
+                    <div className="mt-1.5 flex items-center justify-between text-[0.6875rem] text-white/70">
+                      <span className="tabular-nums">
+                        {f.alt.length} / {ALT_MAX}
+                      </span>
+                      <button type="button" className="font-semibold text-white hover:underline" onClick={() => setAltEditing(null)}>
+                        Done
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             ))}
           </div>

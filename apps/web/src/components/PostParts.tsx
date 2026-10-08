@@ -1,15 +1,17 @@
-import { Ban, Bookmark, Heart, Link2, MessageCircle, MoreHorizontal, Pencil, Quote, Repeat2, Share, Trash2, UserMinus, UserPlus, VolumeX } from 'lucide-react';
+import { Ban, Bookmark, ClipboardCopy, Flag, Heart, Link2, MessageCircle, MoreHorizontal, Pencil, Quote, Repeat2, Send, Share, Trash2, UserMinus, UserPlus, VolumeX } from 'lucide-react';
 import { useState, type MouseEvent, type ReactNode } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router';
 import { toast } from 'sonner';
 import { api, errorMessage } from '../lib/api';
 import { useMe } from '../lib/auth';
+import { openSendPost } from '../lib/chat-share';
 import { openComposer } from '../lib/composer';
-import { copyLink, postUrl, togglePostFlag, useDeletePost, votePoll } from '../lib/posts';
+import { copyLink, copyText, postUrl, shareOrCopyLink, togglePostFlag, useDeletePost, votePoll } from '../lib/posts';
 import { queryClient } from '../lib/query';
 import type { Post, UserSummary } from '../lib/types';
 import { cn, compact, shortTime, timeLeft } from '../lib/utils';
 import { MediaGrid } from './Media';
+import { ReportDialog } from './ReportDialog';
 import { RichText } from './RichText';
 import { Avatar, ConfirmDialog, Menu, MenuContent, MenuItem, MenuTrigger } from './ui';
 
@@ -138,6 +140,7 @@ export function PostMenu({ post, onDark }: { post: Post; onDark?: boolean }) {
   const navigate = useNavigate();
   const location = useLocation();
   const [confirm, setConfirm] = useState(false);
+  const [report, setReport] = useState(false);
   const author = post.author;
   const canEdit = post.isMine && Date.now() - post.createdAt < EDIT_WINDOW;
 
@@ -199,11 +202,42 @@ export function PostMenu({ post, onDark }: { post: Post; onDark?: boolean }) {
               </>
             )
           )}
+          {post.content && (
+            <MenuItem icon={<ClipboardCopy />} onSelect={() => copyText(post)}>
+              Copy text
+            </MenuItem>
+          )}
           <MenuItem icon={<Link2 />} onSelect={() => copyLink(post)}>
             Copy link
           </MenuItem>
+          <MenuItem icon={<Share />} onSelect={() => shareOrCopyLink(post)}>
+            Share
+          </MenuItem>
+          {me && (
+            <MenuItem icon={<Send />} onSelect={() => openSendPost(post.id)}>
+              Send in message
+            </MenuItem>
+          )}
+          {!post.isMine && me && (
+            <MenuItem icon={<Flag />} danger onSelect={() => setReport(true)}>
+              Report
+            </MenuItem>
+          )}
         </MenuContent>
       </Menu>
+      {!post.isMine && me && (
+        <ReportDialog
+          open={report}
+          onOpenChange={setReport}
+          target={{
+            type: 'post',
+            id: post.id,
+            username: author?.username,
+            onBlock: author ? () => relation('block', author) : undefined,
+            onMute: author ? () => relation('mute', author) : undefined,
+          }}
+        />
+      )}
       <ConfirmDialog
         open={confirm}
         onOpenChange={setConfirm}

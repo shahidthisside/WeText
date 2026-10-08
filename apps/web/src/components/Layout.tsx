@@ -1,5 +1,5 @@
 import { Bell, Compass, Home, LogOut, MessageCircle, PenLine, Search, Settings, Sparkles, User, Bookmark, CircleHelp, type LucideIcon } from 'lucide-react';
-import { Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { Fragment, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router';
 import { toast } from 'sonner';
 import { api } from '../lib/api';
@@ -64,6 +64,19 @@ function Dock({ items }: { items: DockItem[] }) {
     return () => ro.disconnect();
   }, [measure, items.length]);
 
+  const writeAt = Math.ceil(items.length / 2);
+  const writeButton = (
+    <button
+      key="write"
+      onClick={() => openComposer()}
+      aria-label="Write"
+      className="group relative z-10 mx-1 flex h-[52px] w-[56px] shrink-0 flex-col items-center justify-center gap-0.5 rounded-[22px] bg-accent text-on-accent shadow-[0_8px_20px_-8px_var(--wt-accent)] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_12px_24px_-8px_var(--wt-accent)] active:translate-y-0 active:scale-95 sm:mx-0 sm:h-12 sm:w-auto sm:flex-row sm:gap-2 sm:rounded-full sm:px-5"
+    >
+      <PenLine className="size-5 transition-transform duration-300 group-hover:-rotate-12" />
+      <span className="text-[11px] font-semibold leading-none sm:text-[0.875rem]">Write</span>
+    </button>
+  );
+
   return (
     <nav
       ref={nav}
@@ -83,34 +96,29 @@ function Dock({ items }: { items: DockItem[] }) {
       {items.map((it, i) => {
         const active = i === activeIdx;
         return (
-          <NavLink
-            key={it.to}
-            to={it.to}
-            ref={(el) => {
-              refs.current[i] = el;
-            }}
-            aria-label={it.label}
-            className={cn(
-              'group relative z-10 flex h-[52px] min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-[22px] px-0.5 transition-colors duration-300 active:scale-95 sm:h-12 sm:flex-none sm:flex-row sm:gap-2 sm:rounded-full sm:px-4',
-              active ? 'text-bg' : 'text-fg-muted hover:text-fg',
-            )}
-          >
-            <span className="relative">
-              <it.icon key={active ? 'on' : 'off'} className={cn('size-[21px] transition-transform duration-300 group-hover:-translate-y-0.5', active && 'animate-pop')} strokeWidth={active ? 2.4 : 1.9} />
-              <Count n={it.badge} />
-            </span>
-            <span className="text-[11px] font-semibold leading-none sm:text-[0.875rem]">{it.label}</span>
-          </NavLink>
+          <Fragment key={it.to}>
+            {/* Write sits in the middle of the dock: half the tabs on each side. */}
+            {i === writeAt && writeButton}
+            <NavLink
+              to={it.to}
+              ref={(el) => {
+                refs.current[i] = el;
+              }}
+              aria-label={it.label}
+              className={cn(
+                'group relative z-10 flex h-[52px] min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-[22px] px-0.5 transition-colors duration-300 active:scale-95 sm:h-12 sm:flex-none sm:flex-row sm:gap-2 sm:rounded-full sm:px-4',
+                active ? 'text-bg' : 'text-fg-muted hover:text-fg',
+              )}
+            >
+              <span className="relative">
+                <it.icon key={active ? 'on' : 'off'} className={cn('size-[21px] transition-transform duration-300 group-hover:-translate-y-0.5', active && 'animate-pop')} strokeWidth={active ? 2.4 : 1.9} />
+                <Count n={it.badge} />
+              </span>
+              <span className="text-[11px] font-semibold leading-none sm:text-[0.875rem]">{it.label}</span>
+            </NavLink>
+          </Fragment>
         );
       })}
-      <button
-        onClick={() => openComposer()}
-        aria-label="Write"
-        className="group relative z-10 ml-1 flex h-[52px] w-[54px] shrink-0 flex-col max-[360px]:w-[48px] items-center justify-center gap-0.5 rounded-[22px] bg-accent text-on-accent shadow-[0_8px_20px_-8px_var(--wt-accent)] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_12px_24px_-8px_var(--wt-accent)] active:translate-y-0 active:scale-95 sm:h-12 sm:w-auto sm:flex-row sm:gap-2 sm:rounded-full sm:px-5"
-      >
-        <PenLine className="size-5 transition-transform duration-300 group-hover:-rotate-12" />
-        <span className="text-[11px] font-semibold leading-none sm:text-[0.875rem]">Write</span>
-      </button>
     </nav>
   );
 }
@@ -187,7 +195,6 @@ function TopBar() {
 }
 
 export function AppLayout() {
-  const me = useAuthedMe();
   const counts = useCounts();
   const location = useLocation();
   useRealtime();
@@ -197,7 +204,6 @@ export function AppLayout() {
     { to: '/discover', label: 'Discover', icon: Compass },
     { to: '/connect', label: 'Connect', icon: Sparkles },
     { to: '/chats', label: 'Chats', icon: MessageCircle, badge: (c?.messages ?? 0) + (c?.messageRequests ?? 0) },
-    { to: `/${me.username}`, label: 'You', icon: User },
   ];
   const inChatThread = /^\/chats\/[^/]+/.test(location.pathname);
   // Keep the unread count in the browser tab title, composing with whatever
@@ -205,7 +211,7 @@ export function AppLayout() {
   const totalUnread = (c?.messages ?? 0) + (c?.messageRequests ?? 0) + (c?.notifications ?? 0) + (c?.followRequests ?? 0);
   useDocumentTitleBadge(totalUnread);
   return (
-    <div className="min-h-dvh">
+    <div className="min-h-dvh overflow-x-clip">
       <TopBar />
       <main className={cn('mx-auto w-full max-w-[1180px] px-4 sm:px-6', inChatThread ? 'pb-4' : 'pb-32')}>
         <Suspense fallback={<PageSpinner />}>

@@ -100,6 +100,28 @@ export function useRealtime() {
         if (!data) return data;
         const all = data.pages.flatMap((pg) => pg.items);
         if (all.some((m) => m.id === p.message.id)) return data;
+        // The server echoes my own message over the socket, sometimes before the HTTP reply arrives. Let it take
+        // over the matching pending bubble in place, so there is never a second copy and the bubble never remounts.
+        if (p.message.senderId === me.id) {
+          const same = (m: Message) =>
+            !!m.pending &&
+            m.id.startsWith('tmp-') &&
+            m.body.replace(/\s+/g, ' ').trim() === p.message.body.replace(/\s+/g, ' ').trim() &&
+            (m.image?.url ?? null) === (p.message.image?.url ?? null) &&
+            (m.audio?.url ?? null) === (p.message.audio?.url ?? null) &&
+            (m.replyTo?.id ?? null) === (p.message.replyTo?.id ?? null);
+          const pend = all.find(same);
+          if (pend) {
+            let adopted = false;
+            return {
+              ...data,
+              pages: data.pages.map((pg) => ({
+                ...pg,
+                items: pg.items.map((m) => (!adopted && m.id === pend.id ? ((adopted = true), { ...p.message, clientKey: m.clientKey ?? m.id }) : m)),
+              })),
+            };
+          }
+        }
         const pages = [...data.pages];
         const first = pages[0]!;
         pages[0] = { ...first, items: [...first.items, p.message] };

@@ -254,7 +254,7 @@ export function Thread({ id, onBack }: { id: string; onBack: () => void }) {
           const exists = d.pages.some((p) => p.items.some((x) => x.id === r.message.id));
           return {
             ...d,
-            pages: d.pages.map((p) => ({ ...p, items: exists ? p.items.filter((x) => x.id !== tempId) : p.items.map((x) => (x.id === tempId ? r.message : x)) })),
+            pages: d.pages.map((p) => ({ ...p, items: exists ? p.items.filter((x) => x.id !== tempId) : p.items.map((x) => (x.id === tempId ? { ...r.message, clientKey: x.clientKey ?? tempId } : x)) })),
           };
         });
         queryClient.invalidateQueries({ queryKey: ['conversations'] });
@@ -272,6 +272,7 @@ export function Thread({ id, onBack }: { id: string; onBack: () => void }) {
       const reply = payload.replyToId ? messages.find((m) => m.id === payload.replyToId) : null;
       const optimistic: Message = {
         id: tempId,
+        clientKey: tempId,
         conversationId: id,
         senderId: me.id,
         body: payload.body,
@@ -458,7 +459,7 @@ export function Thread({ id, onBack }: { id: string; onBack: () => void }) {
             if (m.kind === 'system') {
               const actor = m.senderId === me.id ? 'You' : m.sender?.displayName ?? 'Someone';
               return (
-                <Fragment key={m.id}>
+                <Fragment key={m.clientKey ?? m.id}>
                   {newDay && (
                     <div className="sticky top-1 z-[1] my-4 flex justify-center">
                       <span className="rounded-full bg-bg-muted px-3 py-1 text-[0.75rem] font-semibold text-fg-muted shadow-sm">{dayLabel(m.createdAt)}</span>
@@ -480,7 +481,7 @@ export function Thread({ id, onBack }: { id: string; onBack: () => void }) {
             const mine = m.senderId === me.id;
             const senderMember = isGroup && !mine ? memberById.get(m.senderId) : undefined;
             return (
-              <Fragment key={m.id}>
+              <Fragment key={m.clientKey ?? m.id}>
                 {newDay && (
                   <div className="sticky top-1 z-[1] my-4 flex justify-center">
                     <span className="rounded-full bg-bg-muted px-3 py-1 text-[0.75rem] font-semibold text-fg-muted shadow-sm">{dayLabel(m.createdAt)}</span>

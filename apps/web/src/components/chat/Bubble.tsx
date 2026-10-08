@@ -177,7 +177,6 @@ export function Bubble({
               className={cn(
                 'overflow-hidden',
                 radius,
-                m.pending && 'opacity-60',
                 m.failed && 'ring-2 ring-danger',
                 m.audio ? (mine ? 'bg-accent' : 'bg-bg-muted') : '',
                 m.sharedPost ? (mine ? 'bg-accent' : 'bg-bg-muted') : '',
@@ -193,7 +192,7 @@ export function Bubble({
                   />
                 </button>
               )}
-              {m.audio && <AudioBubble url={m.audio.url} durationMs={m.audio.durationMs} mine={mine} seed={m.id} />}
+              {m.audio && <AudioBubble url={m.audio.url} durationMs={m.audio.durationMs} mine={mine} seed={m.clientKey ?? m.id} />}
               {m.sharedPost && <SharedPostCard post={m.sharedPost} mine={mine} />}
               {m.body && (
                 <div className={cn('px-4 py-2 text-[0.9375rem] leading-snug [overflow-wrap:anywhere]', mine ? 'bg-accent text-on-accent [&_a]:text-on-accent [&_a]:underline' : 'bg-bg-muted text-fg')}>

@@ -182,6 +182,8 @@ export interface Message {
   kind?: 'user' | 'system';
   /** Populated only for messages in group conversations, so group UIs can show the author. */
   sender?: MessageSender | null;
+  /** Client-only: stable React key. An optimistic message keeps the key it was created with after the server confirms it, so the bubble is updated in place instead of being replaced. */
+  clientKey?: string;
   /** Client-only: optimistic message awaiting server ack. */
   pending?: boolean;
   failed?: boolean;

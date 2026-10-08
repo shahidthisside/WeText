@@ -270,7 +270,18 @@ export function Composer({
 
         {/* Send button: only when there is content and we're not recording. */}
         {!recording && (canSend || text.trim()) && (
-          <IconButton label="Send" tone="accent" onClick={doSend} disabled={!canSend}>
+          <IconButton
+            label="Send"
+            tone="accent"
+            // Keep the cursor in the text box when Send is tapped, otherwise the phone keyboard closes and the thread jumps.
+            onPointerDown={(e) => e.preventDefault()}
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => {
+              void doSend();
+              ta.current?.focus({ preventScroll: true });
+            }}
+            disabled={!canSend}
+          >
             <SendHorizontal className="size-5" />
           </IconButton>
         )}

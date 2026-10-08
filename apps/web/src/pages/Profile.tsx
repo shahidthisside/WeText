@@ -242,7 +242,7 @@ export default function ProfilePage() {
             <p className="mt-4 text-[0.9375rem] text-fg-muted">@{u.username} has blocked you.</p>
           ) : (
             <>
-              {u.bio && <p className="mt-4 max-w-[60ch] whitespace-pre-wrap text-[1.0625rem] leading-relaxed">{u.bio}</p>}
+              {u.bio && <p className="mt-4 max-w-[60ch] whitespace-pre-wrap text-[1.0625rem] leading-relaxed [overflow-wrap:anywhere]">{u.bio}</p>}
               <div className="mt-4 flex flex-wrap gap-x-5 gap-y-1.5 text-[0.875rem] text-fg-muted">
                 {u.location && (
                   <span className="flex items-center gap-1.5">

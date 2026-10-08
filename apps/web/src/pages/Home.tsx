@@ -63,8 +63,9 @@ function WriteBar() {
   return (
     <div className="flex items-center gap-3 rounded-[22px] border border-line bg-card p-2.5 shadow-paper">
       <Avatar user={me} size={40} />
-      <button onClick={() => openComposer()} className="h-11 min-w-0 flex-1 rounded-full bg-bg-muted px-4 text-left text-[0.9375rem] text-fg-subtle transition-colors hover:bg-bg-hover">
-        What’s on your mind?
+      <button onClick={() => openComposer()} className="h-11 min-w-0 flex-1 truncate rounded-full bg-bg-muted px-4 text-left text-[0.9375rem] text-fg-subtle transition-colors hover:bg-bg-hover">
+        <span className="min-[400px]:hidden">Write a note…</span>
+        <span className="max-[399px]:hidden">What’s on your mind?</span>
       </button>
       <button
         onClick={() => openComposer({ whisper: true })}

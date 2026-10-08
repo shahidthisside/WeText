@@ -33,7 +33,7 @@ export function SharedPostCard({ post, mine }: { post: SharedPost; mine: boolean
         </span>
       </span>
       {post.content && (
-        <span className={cn('line-clamp-3 whitespace-pre-wrap text-[0.875rem] leading-snug', mine ? 'text-on-accent/90' : 'text-fg')}>{post.content}</span>
+        <span className={cn('line-clamp-3 whitespace-pre-wrap break-words text-[0.875rem] leading-snug', mine ? 'text-on-accent/90' : 'text-fg')}>{post.content}</span>
       )}
       {post.media && <img src={post.media.url} alt="" className="max-h-32 w-full rounded-lg object-cover" />}
     </Link>

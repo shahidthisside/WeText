@@ -136,32 +136,121 @@ export interface DailyPrompt {
   answered: boolean;
 }
 
+/** A note shared into a chat (compact card). Matches the server `sharedPost` field. */
+export type SharedPost =
+  | { id: string; available: false }
+  | {
+      id: string;
+      available: true;
+      content: string;
+      createdAt: number;
+      author: { username: string; displayName: string; avatarUrl: string | null } | null;
+      media: { url: string } | null;
+    };
+
+/** The sender of a message in a group conversation (null for 1:1 chats). */
+export interface MessageSender {
+  id: string;
+  username: string;
+  displayName: string;
+  avatarUrl: string | null;
+}
+
 export interface Message {
   id: string;
   conversationId: string;
   senderId: string;
   body: string;
   image: { url: string; width: number; height: number } | null;
+  /** Voice note. */
+  audio: { url: string; durationMs: number } | null;
+  /** A note shared into the chat. */
+  sharedPost: SharedPost | null;
   replyTo: { id: string; senderId: string | null; body: string; hasImage: boolean; deleted: boolean } | null;
   createdAt: number;
+  /** When the body was last edited, or null. */
+  editedAt: number | null;
+  /** This message was forwarded from another conversation. */
+  forwarded: boolean;
   deleted: boolean;
+  /** When a disappearing message self-destructs, or null. */
+  expiresAt: number | null;
+  /** Whether the requesting viewer has starred this message. */
+  starred: boolean;
   reactions: { emoji: string; userIds: string[] }[];
+  /** 'user' for normal messages, 'system' for group event lines ("Ana added Ben"). */
+  kind?: 'user' | 'system';
+  /** Populated only for messages in group conversations, so group UIs can show the author. */
+  sender?: MessageSender | null;
   /** Client-only: optimistic message awaiting server ack. */
   pending?: boolean;
   failed?: boolean;
 }
 
+export type MemberRole = 'admin' | 'member';
+
+/** An active member of a group conversation. */
+export interface GroupMember {
+  id: string;
+  username: string;
+  displayName: string;
+  avatarUrl: string | null;
+  role: MemberRole;
+  isOnline: boolean;
+}
+
+/** A member's last-read timestamp, used for "seen by" in groups. */
+export interface ReadReceipt {
+  userId: string;
+  at: number;
+}
+
 export interface Conversation {
   id: string;
-  other: UserSummary & { isOnline: boolean; lastSeenAt: number | null };
+  /** The other participant in a 1:1 chat; always null for groups. */
+  other: (UserSummary & { isOnline: boolean; lastSeenAt: number | null }) | null;
   lastMessage: Message | null;
   unread: number;
   isRequest: boolean;
   muted: boolean;
+  pinned: boolean;
+  pinnedAt: number | null;
+  archived: boolean;
+  markedUnread: boolean;
+  /** Disappearing-message TTL in seconds: 0 | 86400 | 604800 | 7776000. */
+  ttlSeconds: number;
   otherLastReadAt: number;
   canSend: boolean;
   blockedByMe: boolean;
   updatedAt: number;
+  // --- Group fields (present only when isGroup is true) ---
+  /** True for group conversations. Absent/false for 1:1. */
+  isGroup?: boolean;
+  /** Group name (groups only). */
+  title?: string;
+  /** Active members (groups only), ordered by join time, max 50. */
+  members?: GroupMember[];
+  memberCount?: number;
+  /** The viewer's role in the group. */
+  myRole?: MemberRole;
+  /** The group creator's user id, or null if their account was deleted. */
+  createdBy?: string | null;
+  /** Active members (excluding me) with their last-read timestamp. */
+  readBy?: ReadReceipt[];
+  /** True if the viewer has left or been removed from the group. */
+  left?: boolean;
+}
+
+/** An entry on the Starred messages screen. */
+export interface StarredEntry {
+  message: Message;
+  conversation: {
+    id: string;
+    other: { username: string; displayName: string; avatarUrl: string | null } | null;
+    isGroup?: boolean;
+    title?: string;
+  };
+  starredAt: number;
 }
 
 export interface Meta {

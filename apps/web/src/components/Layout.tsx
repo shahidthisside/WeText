@@ -1,5 +1,5 @@
 import { Bell, Compass, Home, LogOut, MessageCircle, PenLine, Search, Settings, Sparkles, User, Bookmark, CircleHelp, type LucideIcon } from 'lucide-react';
-import { Suspense, useCallback, useLayoutEffect, useRef, useState } from 'react';
+import { Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router';
 import { toast } from 'sonner';
 import { api } from '../lib/api';
@@ -13,6 +13,7 @@ import { cn } from '../lib/utils';
 import { CommandPalette } from './CommandPalette';
 import { HelpSheet } from './HelpSheet';
 import { Composer } from './Composer';
+import { ShareToChat } from './chat/ShareToChat';
 import { Avatar, Logo, Menu, MenuContent, MenuItem, MenuTrigger, Modal, PageSpinner } from './ui';
 
 export async function logout() {
@@ -98,17 +99,17 @@ function Dock({ items }: { items: DockItem[] }) {
               <it.icon key={active ? 'on' : 'off'} className={cn('size-[21px] transition-transform duration-300 group-hover:-translate-y-0.5', active && 'animate-pop')} strokeWidth={active ? 2.4 : 1.9} />
               <Count n={it.badge} />
             </span>
-            <span className="text-[0.625rem] font-semibold leading-none max-[360px]:text-[0.5625rem] sm:text-[0.875rem]">{it.label}</span>
+            <span className="text-[11px] font-semibold leading-none sm:text-[0.875rem]">{it.label}</span>
           </NavLink>
         );
       })}
       <button
         onClick={() => openComposer()}
         aria-label="Write"
-        className="group relative z-10 ml-1 flex h-[52px] w-[54px] shrink-0 flex-col max-[360px]:w-[46px] items-center justify-center gap-0.5 rounded-[22px] bg-accent text-on-accent shadow-[0_8px_20px_-8px_var(--wt-accent)] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_12px_24px_-8px_var(--wt-accent)] active:translate-y-0 active:scale-95 sm:h-12 sm:w-auto sm:flex-row sm:gap-2 sm:rounded-full sm:px-5"
+        className="group relative z-10 ml-1 flex h-[52px] w-[54px] shrink-0 flex-col max-[360px]:w-[48px] items-center justify-center gap-0.5 rounded-[22px] bg-accent text-on-accent shadow-[0_8px_20px_-8px_var(--wt-accent)] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_12px_24px_-8px_var(--wt-accent)] active:translate-y-0 active:scale-95 sm:h-12 sm:w-auto sm:flex-row sm:gap-2 sm:rounded-full sm:px-5"
       >
         <PenLine className="size-5 transition-transform duration-300 group-hover:-rotate-12" />
-        <span className="text-[0.625rem] font-semibold leading-none max-[360px]:text-[0.5625rem] sm:text-[0.875rem]">Write</span>
+        <span className="text-[11px] font-semibold leading-none sm:text-[0.875rem]">Write</span>
       </button>
     </nav>
   );
@@ -198,23 +199,70 @@ export function AppLayout() {
     { to: '/chats', label: 'Chats', icon: MessageCircle, badge: (c?.messages ?? 0) + (c?.messageRequests ?? 0) },
     { to: `/${me.username}`, label: 'You', icon: User },
   ];
-  const inChat = /^\/chats\/[^/]+/.test(location.pathname);
+  const inChatThread = /^\/chats\/[^/]+/.test(location.pathname);
+  // Keep the unread count in the browser tab title, composing with whatever
+  // per-page title general_web has set. We only prefix "(n) ".
+  const totalUnread = (c?.messages ?? 0) + (c?.messageRequests ?? 0) + (c?.notifications ?? 0) + (c?.followRequests ?? 0);
+  useDocumentTitleBadge(totalUnread);
   return (
     <div className="min-h-dvh">
       <TopBar />
-      <main className={cn('mx-auto w-full max-w-[1180px] px-4 sm:px-6', inChat ? 'pb-4' : 'pb-32')}>
+      <main className={cn('mx-auto w-full max-w-[1180px] px-4 sm:px-6', inChatThread ? 'pb-4' : 'pb-32')}>
         <Suspense fallback={<PageSpinner />}>
           <div key={location.pathname.split('/')[1]} className="animate-rise">
             <Outlet />
           </div>
         </Suspense>
       </main>
-      {!inChat && <Dock items={items} />}
+      {/* The dock stays visible everywhere. On phones a full-screen thread
+          overlay (Messages.tsx) sits above it, covering it as required. */}
+      <Dock items={items} />
       <ComposerModal />
+      <ShareToChat />
       <CommandPalette />
       <HelpSheet />
     </div>
   );
+}
+
+/**
+ * Prefixes the browser tab title with "(n) " when there are unread items,
+ * composing with whatever title the active page set. No MutationObserver: we
+ * strip any existing "(n) " prefix and re-apply, re-running whenever `n`
+ * changes or the route (hence the title) changes.
+ */
+/**
+ * Prefixes the browser tab title with "(n) " when there are unread items,
+ * composing with whatever title the active page set via `useDocumentTitle`.
+ *
+ * Effect-ordering between this layout and the child page is fragile (a page's
+ * `useDocumentTitle` effect can run after ours and clobber the prefix), so we
+ * watch the <title> element and re-apply the prefix whenever it changes. The
+ * observer ignores our own writes via a guard flag.
+ */
+function useDocumentTitleBadge(n: number) {
+  useEffect(() => {
+    const titleEl = document.querySelector('title');
+    if (!titleEl) return;
+    let selfWrite = false;
+    const apply = () => {
+      const base = document.title.replace(/^\(\d+\)\s+/, '');
+      const next = n > 0 ? `(${n}) ${base}` : base;
+      if (next === document.title) return;
+      selfWrite = true;
+      document.title = next;
+    };
+    const obs = new MutationObserver(() => {
+      if (selfWrite) {
+        selfWrite = false;
+        return;
+      }
+      apply();
+    });
+    obs.observe(titleEl, { childList: true, characterData: true, subtree: true });
+    apply();
+    return () => obs.disconnect();
+  }, [n]);
 }
 
 function ComposerModal() {

@@ -80,7 +80,7 @@ export class Realtime {
       if (!parsed.success) return;
       try {
         const members = (await this.db
-          .prepare('SELECT user_id FROM conversation_members WHERE conversation_id = ?')
+          .prepare('SELECT user_id FROM conversation_members WHERE conversation_id = ? AND left_at IS NULL')
           .pluck()
           .all(parsed.data.conversationId)) as string[];
         if (!members.includes(userId)) return;
@@ -89,6 +89,24 @@ export class Realtime {
         }
       } catch {
         /* typing indicators are best-effort */
+      }
+    });
+
+    // Voice-note recording indicator: relayed to the other active members only.
+    socket.on('recording', async (payload: unknown) => {
+      const parsed = z.object({ conversationId: z.string().max(32), on: z.boolean() }).safeParse(payload);
+      if (!parsed.success) return;
+      try {
+        const members = (await this.db
+          .prepare('SELECT user_id FROM conversation_members WHERE conversation_id = ? AND left_at IS NULL')
+          .pluck()
+          .all(parsed.data.conversationId)) as string[];
+        if (!members.includes(userId)) return;
+        for (const m of members) {
+          if (m !== userId) this.emitToUser(m, 'recording', { conversationId: parsed.data.conversationId, userId, on: parsed.data.on });
+        }
+      } catch {
+        /* recording indicators are best-effort */
       }
     });
 

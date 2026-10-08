@@ -12,7 +12,7 @@
 ![React](https://img.shields.io/badge/react-19-149eca)
 ![Fastify](https://img.shields.io/badge/fastify-5-000000)
 ![libSQL](https://img.shields.io/badge/sqlite%2FTurso-FTS5-003b57)
-![Tests](https://img.shields.io/badge/tests-50%20passing-2ea44f)
+![Tests](https://img.shields.io/badge/tests-159%20passing-2ea44f)
 [![License: Proprietary](https://img.shields.io/badge/license-proprietary-red)](LICENSE)
 
 [Live site](https://wetextapp.onrender.com) · [Features](#features) · [Quick start](#quick-start) · [Architecture](#architecture) · [API](#api-overview) · [Security](#security) · [Deployment](#deployment)
@@ -68,7 +68,7 @@ The app keeps **no state on the server**. Accounts, posts, messages and photos a
 | Connect | A card deck matching you on interests (60%) and five personality sliders (40%): homebody or social, night owl or early bird, practical or imaginative, planner or spontaneous, listener or talker. Keyboard: `←` pass, `→` follow |
 | Vibe check | Per-trait closeness between you and another person, without revealing their raw answers |
 | Profiles | Avatar and banner, bio, location, website, interests, mutual followers, and followers and following lists |
-| Chats | Typing indicators, seen receipts, emoji reactions (❤️ 😂 😮 😢 👍 🔥), replies, photos, unsend, mute, a separate requests inbox for people you do not follow, and live presence |
+| Chats | Full-screen, app-like chat on phones (a two-pane layout on desktop). Text, photos (several at once, with captions, paste or drag and drop), **voice messages** (record, play, 1x/1.5x/2x speed), and **notes shared into a chat**. Reply, **edit** (15 minutes), **forward** (up to 5 chats), **star**, copy, message info, 8 emoji reactions, **unsend for everyone** or **delete for me**. Pin (up to 3), archive, mute and mark as unread; in-chat search and a shared media gallery; **disappearing messages** (24 hours, 7 days or 90 days); per-chat drafts, typing and recording indicators, sent/seen receipts, unread dividers, a requests inbox for people you do not follow, and live presence. **Group chats** of up to 50 people: a name, admins and members, system lines ("Ana added Ben"), sender names, "Seen by", people added later only see messages from when they joined, and every message feature above works in groups |
 
 ### Around the app
 
@@ -79,7 +79,9 @@ The app keeps **no state on the server**. Accounts, posts, messages and photos a
 - **Beginner friendly**: a dismissible getting-started checklist, a Help sheet with a plain-language glossary and shortcuts, labelled navigation and tools, and an invite button that copies or shares the site link.
 - **Privacy controls**: private accounts with follow requests, a DM policy (everyone, people you follow, or no one), hidden online status, and mute, block and remove follower.
 - **Accounts**: sign up with email and password, sign in with username or email, and reset a forgotten password by email.
-- **Settings**: username, email, password (signs out other sessions), active sessions, account deletion, themes, accent colours and text size.
+- **Safety and control**: report a note or a person, download all your data as JSON, and block, mute or remove followers. The site owner can review reports through an admin-only endpoint.
+- **Everyday polish**: alt text for photos, drafts that survive a reload, a "new notes" pill and pull to refresh, per-page titles, an offline banner, friendly error screens, and an installable web app manifest.
+- **Settings**: username, email, password (signs out other sessions), active sessions, download your data, account deletion, themes, accent colours and text size.
 
 ## Tech stack
 
@@ -119,7 +121,7 @@ Run these from the repository root.
 | `npm run dev` | Starts the API (tsx watch) and Vite, proxying `/api`, `/uploads` and `/socket.io` |
 | `npm run build` | Builds the web app and compiles the server |
 | `npm start` | Production: one Node process serves the API, websockets and the built web app |
-| `npm test` | Runs the server test suite (50 tests) |
+| `npm test` | Runs the server test suite (159 tests) |
 | `npm run typecheck` | Type-checks both workspaces |
 
 ## Configuration
@@ -134,7 +136,8 @@ All settings are optional environment variables read by the server. Defaults wor
 | `BREVO_API_KEY` | | Brevo API key for password-reset email |
 | `MAIL_FROM` | | Sender address verified in Brevo |
 | `MAIL_FROM_NAME` | `WeText` | Sender name |
-| `PHOTO_QUOTA_MB` | `150` | Photo storage allowed per account |
+| `PHOTO_QUOTA_MB` | `150` | Photo and voice-message storage allowed per account |
+| `ADMIN_USERNAME` | | Optional. The one account allowed to read `GET /api/admin/reports` |
 | `PORT` | `4000` | HTTP port |
 | `HOST` | `127.0.0.1` | Use `0.0.0.0` in containers and on hosts like Render |
 | `WEB_ORIGIN` | `http://localhost:5173` | Allowed browser origin in development |
@@ -184,8 +187,10 @@ All endpoints are JSON under `/api` and use the session cookie. This is a summar
 | People | `GET /users/:username` · `POST /users/:username/follow` · `GET /users/:username/vibe` · `POST /users/:username/block` · `POST /users/:username/mute` |
 | Discover | `GET /search` · `GET /trending` · `GET /suggestions` · `GET /connect` · `POST /connect/:userId/pass` · `GET /tags/:tag` |
 | Notifications | `GET /notifications` · `POST /notifications/read` · `GET /me/counts` · `GET /me/follow-requests` · `POST /me/follow-requests/:userId/:action` |
-| Chats | `GET /conversations` · `POST /conversations` · `GET /conversations/:id/messages` · `POST /conversations/:id/read` · `PUT /messages/:id/reaction` · `DELETE /messages/:id` |
-| Uploads | `POST /uploads?kind=avatar\|banner\|media` (images only, re-encoded to WebP and stored in the database). Photos are served from `/uploads/:userId/:file` |
+| Chats | `GET /conversations?tab=primary\|requests\|archived` · `POST /conversations` · `POST /conversations/group` · `POST /conversations/:id/members` · `DELETE /conversations/:id/members/:userId` (remove or leave) · `PATCH /conversations/:id/members/:userId` (admin role) · `PATCH /conversations/:id` (mute, pin, archive, mark unread, disappearing timer) · `GET /conversations/:id/messages` · `GET /conversations/:id/search` · `GET /conversations/:id/media` · `POST /conversations/:id/read` |
+| Messages | `POST /conversations/:id/messages` (text, photo, voice, shared note, reply) · `PATCH /messages/:id` (edit) · `DELETE /messages/:id` (unsend) · `POST /messages/:id/hide` (delete for me) · `POST /messages/:id/forward` · `PUT /messages/:id/star` · `PUT /messages/:id/reaction` · `GET /me/starred-messages` |
+| Safety | `POST /reports` · `GET /me/export` · `GET /admin/reports` (owner only) |
+| Uploads | `POST /uploads?kind=avatar\|banner\|media\|audio`. Images are re-encoded to WebP; voice notes are checked by content, not by the name the client gives. Both are stored in the database and served from `/uploads/:userId/:file` (voice notes support range requests) |
 | Health | `GET /health` |
 
 Errors use a consistent shape: `{ "error": "Human-readable message", "code": "machine_code" }`.
@@ -196,11 +201,12 @@ Socket.IO authenticates with the same session cookie. The server pushes these ev
 
 | Event | Payload |
 | --- | --- |
-| `message:new` · `message:updated` | The message after it was sent, reacted to or unsent |
+| `message:new` · `message:updated` | The message after it was sent, edited, reacted to, starred or unsent |
+| `conversation:updated` · `conversation:members` | A chat setting, name or member list changed |
 | `conversation:read` | Who read a conversation, used for seen receipts |
 | `notification` | The new unread notification count |
 | `presence` · `presence:snapshot` | Online state for people you are watching (respects the hide-online-status setting) |
-| `typing` | Sent by the client while composing, relayed to the other participant |
+| `typing` · `recording` | Sent by the client while composing or recording a voice message, relayed to the other participant |
 
 ## Security
 
@@ -208,7 +214,8 @@ Socket.IO authenticates with the same session cookie. The server pushes these ev
 - State-changing API requests that carry a foreign `Origin` are rejected, in addition to `SameSite=Lax` cookies.
 - Rate limits: 10 requests a minute on sign-up, sign-in and password endpoints, 5 a minute on forgot-password, 60 on uploads and 120 on sending messages. Login takes the same time whether or not the account exists.
 - Helmet applies a strict Content Security Policy with no inline scripts.
-- Uploads must be images. They are decoded with a pixel limit, re-encoded to WebP (which strips EXIF data) and stored in the database under the uploader's id, with a per-account storage cap. Posts can only attach the author's own uploads.
+- Uploads must be images or audio. Images are decoded with a pixel limit and re-encoded to WebP (which strips EXIF data); audio is identified from its content, not its declared type, and size-capped. Everything is stored in the database under the uploader's id, with a per-account storage cap, and posts and messages can only attach the sender's own uploads.
+- Private accounts do not expose their interests or personality traits to people who cannot see their content, and the vibe check respects the same rule. If you block someone they can no longer read your conversation.
 - Blocks, private accounts and whisper anonymity are enforced on the server for every read path. Whisper authors are never returned by the API.
 - Passwords are stored only as scrypt hashes. Session tokens are stored as SHA-256 hashes, and changing or resetting a password signs out the other sessions.
 - Password reset: the forgot-password endpoint answers identically whether or not an account exists, and sends at most one email a minute per account. Reset tokens are random, stored only as hashes, valid for 30 minutes and usable once. The emailed link is built from `PUBLIC_URL`, never from request headers.
@@ -219,7 +226,7 @@ Socket.IO authenticates with the same session cookie. The server pushes these ev
 npm test
 ```
 
-50 integration tests cover authentication, post visibility and privacy rules, search, matching, moods, prompts, fading notes, whispers, edit history, direct messages, socket events, photo storage, the database adapter and password reset. They run against a temporary database and need no setup.
+159 integration tests cover authentication, post visibility and privacy rules, search, matching, moods, prompts, fading notes, whispers, edit history, reports and data export, every chat feature (edit, forward, star, pin, archive, disappearing messages, voice uploads and range requests, shared notes), group chats (members, roles, history cutoff, leaving), socket events, photo storage, the database adapter, concurrency races and password reset. They run against a temporary database and need no setup.
 
 To run them against a real libSQL server instead (the same protocol Turso uses), start one and point the tests at it:
 

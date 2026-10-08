@@ -109,12 +109,13 @@ export function ImageUpload({
       ) : (
         <div className="aspect-[3/1] w-full bg-bg-muted">{url && <img src={url} alt="" className="size-full object-cover" />}</div>
       )}
-      <div className="absolute inset-0 flex items-center justify-center gap-3">
+      {/* On a banner the camera sits in the middle; on an avatar it is a small badge in the corner so it never covers the initials. */}
+      <div className={kind === 'avatar' ? 'absolute -bottom-3 -right-3 flex' : 'absolute inset-0 flex items-center justify-center gap-3'}>
         <button
           type="button"
           onClick={() => input.current?.click()}
           aria-label={kind === 'avatar' ? 'Upload profile photo' : 'Upload header image'}
-          className="flex size-11 items-center justify-center rounded-full bg-black/55 text-white transition-colors hover:bg-black/70"
+          className={cn('flex items-center justify-center rounded-full bg-black/65 text-white transition-colors hover:bg-black/80', kind === 'avatar' ? 'size-11 ring-[3px] ring-card' : 'size-11')}
         >
           {busy ? <Spinner /> : <Camera className="size-5" />}
         </button>

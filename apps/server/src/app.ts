@@ -20,8 +20,9 @@ import postRoutes from './routes/posts.js';
 import feedRoutes from './routes/feed.js';
 import discoverRoutes from './routes/discover.js';
 import notificationRoutes from './routes/notifications.js';
+import reportRoutes from './routes/reports.js';
 import messageRoutes from './routes/messages.js';
-import uploadRoutes from './routes/uploads.js';
+import uploadRoutes, { serveUpload } from './routes/uploads.js';
 
 export interface AppOptions {
   /** Turso URL or local file path. Defaults to DATABASE_URL / DB_FILE. */
@@ -113,8 +114,14 @@ export async function buildApp(opts: AppOptions = {}) {
     }
   });
 
-  app.setErrorHandler((err, req, reply) => {
-    if (err instanceof HttpError) {
+  // Authed JSON API responses must never be cached by browsers or shared proxies: they are
+  // per-user and may contain private data. (Uploaded photos are served separately and stay cached.)
+  app.addHook('onSend', async (req, reply, payload) => {
+    if (req.url.startsWith('/api/')) reply.header('cache-control', 'no-store');
+    return payload;
+  });
+
+  app.setErrorHandler((err, req, reply) => {    if (err instanceof HttpError) {
       return reply.code(err.status).send({ error: err.message, code: err.code });
     }
     if (err instanceof ZodError) {
@@ -142,16 +149,15 @@ export async function buildApp(opts: AppOptions = {}) {
   await app.register(feedRoutes, { prefix: '/api/feed' });
   await app.register(discoverRoutes, { prefix: '/api' });
   await app.register(notificationRoutes, { prefix: '/api/notifications' });
+  await app.register(reportRoutes, { prefix: '/api' });
   await app.register(messageRoutes, { prefix: '/api' });
   await app.register(uploadRoutes, { prefix: '/api/uploads' });
 
   // User uploads live in the database. File names are random and never change, so they cache forever.
+  // serveUpload() handles images (immutable caching) and audio (Range/206/416, Accept-Ranges).
   app.get('/uploads/:uid/:name', async (req, reply) => {
     const { uid, name } = req.params as { uid: string; name: string };
-    if (!/^[a-z0-9]+$/.test(uid) || !/^[a-zA-Z0-9_-]+\.webp$/.test(name)) return reply.code(404).send({ error: 'Not found', code: 'not_found' });
-    const row = (await db.prepare('SELECT mime, data FROM files WHERE path = ?').get(`${uid}/${name}`)) as { mime: string; data: Buffer } | undefined;
-    if (!row) return reply.code(404).send({ error: 'Not found', code: 'not_found' });
-    return reply.header('cache-control', 'public, max-age=31536000, immutable').type(row.mime).send(row.data);
+    return serveUpload(db, req, reply, uid, name);
   });
 
   // Production: serve the built SPA.

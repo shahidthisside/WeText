@@ -27,6 +27,8 @@ export const config = {
   brevoApiKey: env.BREVO_API_KEY || undefined,
   mailFrom: env.MAIL_FROM || undefined,
   mailFromName: env.MAIL_FROM_NAME || 'WeText',
+  /** Optional: the one account allowed to read submitted reports via GET /api/admin/reports. */
+  adminUsername: env.ADMIN_USERNAME || undefined,
   passwordResetTtlMs: 30 * 60 * 1000,
   /** Photo storage allowed per account (they live in the shared free database). */
   photoQuotaBytes: Number(env.PHOTO_QUOTA_MB ?? 150) * 1024 * 1024,

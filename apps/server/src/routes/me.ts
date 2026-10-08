@@ -1,13 +1,14 @@
 import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 import { requireUser } from '../app.js';
+import { config } from '../config.js';
 import { ALL_INTERESTS, TRAIT_KEYS } from '../lib/catalog.js';
-import { conflict, notFound } from '../lib/errors.js';
-import { cursor, decodeCursor, displayName, encodeCursor, uploadUrl, username } from '../lib/validation.js';
+import { conflict, isUniqueViolation, notFound } from '../lib/errors.js';
+import { cursor, decodeCursor, displayName, encodeCursor, uploadUrl, username, withinCodePoints } from '../lib/validation.js';
 import { notify } from '../services/notifications.js';
 import { unreadNotificationCount } from '../services/notifications.js';
 import { hydrateFeed } from '../services/posts.js';
-import { me, userSummary } from '../services/users.js';
+import { me, parseJson, userSummary } from '../services/users.js';
 import { unreadMessageCounts } from './messages.js';
 import type { UserRow } from '../types.js';
 
@@ -29,8 +30,8 @@ const website = z
 const profileSchema = z
   .object({
     displayName,
-    bio: z.string().trim().max(160, 'Bio can be at most 160 characters'),
-    location: z.string().trim().max(30),
+    bio: z.string().trim().max(320).refine(withinCodePoints(160), 'Bio can be at most 160 characters'),
+    location: z.string().trim().max(60).refine(withinCodePoints(30), 'Location can be at most 30 characters'),
     website,
     avatarUrl: uploadUrl.nullable(),
     bannerUrl: uploadUrl.nullable(),
@@ -93,7 +94,12 @@ const routes: FastifyPluginAsync = async (app) => {
     const body = z.object({ username }).parse(req.body);
     const taken = await db.prepare('SELECT id FROM users WHERE username = ? AND id != ?').get(body.username, user.id);
     if (taken) throw conflict('That username is taken', 'username_taken');
-    await db.prepare('UPDATE users SET username = ? WHERE id = ?').run(body.username, user.id);
+    try {
+      await db.prepare('UPDATE users SET username = ? WHERE id = ?').run(body.username, user.id);
+    } catch (err) {
+      if (isUniqueViolation(err)) throw conflict('That username is taken', 'username_taken');
+      throw err;
+    }
     return { user: (await me(ctx, await reload(user.id))) };
   });
 
@@ -169,6 +175,118 @@ const routes: FastifyPluginAsync = async (app) => {
     const user = requireUser(req);
     await db.prepare('DELETE FROM bookmarks WHERE user_id = ?').run(user.id);
     return { ok: true };
+  });
+
+  /**
+   * Download a copy of your own data as JSON (a lightweight GDPR-style export).
+   * Includes your profile, interests and traits; ALL your own posts (whispers and still-existing
+   * fading ones too); your bookmarks; who you follow and who follows you; who you block and mute;
+   * message counts; and your own sent message bodies grouped by the other person's username. It
+   * never includes other people's message bodies.
+   */
+  app.get('/export', { config: { rateLimit: { max: config.isTest ? 1000 : 3, timeWindow: '1 hour' } } }, async (req, reply) => {
+    const user = requireUser(req);
+    const uid = user.id;
+
+    const posts = (await db
+      .prepare(
+        `SELECT id, content, is_anonymous, reply_to_id, quote_of_id, mood, prompt_key, expires_at, created_at, edited_at
+           FROM posts WHERE author_id = ? ORDER BY created_at DESC`,
+      )
+      .all(uid)) as {
+      id: string; content: string; is_anonymous: number; reply_to_id: string | null; quote_of_id: string | null;
+      mood: string | null; prompt_key: string | null; expires_at: number | null; created_at: number; edited_at: number | null;
+    }[];
+
+    const bookmarks = (await db.prepare('SELECT post_id FROM bookmarks WHERE user_id = ? ORDER BY created_at DESC').pluck().all(uid)) as string[];
+
+    const following = (await db
+      .prepare("SELECT u.username FROM follows f JOIN users u ON u.id = f.followee_id WHERE f.follower_id = ? AND f.status = 'active' ORDER BY u.username")
+      .pluck()
+      .all(uid)) as string[];
+    const followers = (await db
+      .prepare("SELECT u.username FROM follows f JOIN users u ON u.id = f.follower_id WHERE f.followee_id = ? AND f.status = 'active' ORDER BY u.username")
+      .pluck()
+      .all(uid)) as string[];
+    const blocked = (await db
+      .prepare('SELECT u.username FROM blocks b JOIN users u ON u.id = b.blocked_id WHERE b.blocker_id = ? ORDER BY u.username')
+      .pluck()
+      .all(uid)) as string[];
+    const muted = (await db
+      .prepare('SELECT u.username FROM mutes m JOIN users u ON u.id = m.muted_id WHERE m.muter_id = ? ORDER BY u.username')
+      .pluck()
+      .all(uid)) as string[];
+
+    // Conversations the user is a member of, with the other participant's username and totals.
+    const convs = (await db
+      .prepare(
+        `SELECT cm.conversation_id AS cid, ou.username AS other_username
+           FROM conversation_members cm
+           JOIN conversation_members om ON om.conversation_id = cm.conversation_id AND om.user_id != cm.user_id
+           JOIN users ou ON ou.id = om.user_id
+          WHERE cm.user_id = ?`,
+      )
+      .all(uid)) as { cid: string; other_username: string }[];
+
+    const messages = await Promise.all(
+      convs.map(async (c) => {
+        const totalRow = (await db
+          .prepare('SELECT COUNT(*) AS n FROM messages WHERE conversation_id = ? AND deleted_at IS NULL')
+          .get(c.cid)) as { n: number };
+        const sent = (await db
+          .prepare('SELECT body, created_at FROM messages WHERE conversation_id = ? AND sender_id = ? AND deleted_at IS NULL ORDER BY created_at')
+          .all(c.cid, uid)) as { body: string; created_at: number }[];
+        return {
+          with: c.other_username,
+          totalMessages: totalRow.n,
+          sentMessages: sent.length,
+          sent: sent.map((m) => ({ body: m.body, createdAt: m.created_at })),
+        };
+      }),
+    );
+
+    const data = {
+      exportedAt: Date.now(),
+      profile: {
+        username: user.username,
+        email: user.email,
+        displayName: user.display_name,
+        bio: user.bio,
+        location: user.location,
+        website: user.website,
+        avatarUrl: user.avatar_url,
+        bannerUrl: user.banner_url,
+        isPrivate: !!user.is_private,
+        dmPolicy: user.dm_policy,
+        showOnline: !!user.show_online,
+        createdAt: user.created_at,
+      },
+      interests: parseJson<string[]>(user.interests, []),
+      traits: parseJson<Record<string, number>>(user.traits, {}),
+      posts: posts.map((p) => ({
+        id: p.id,
+        content: p.content,
+        isAnonymous: !!p.is_anonymous,
+        replyToId: p.reply_to_id,
+        quoteOfId: p.quote_of_id,
+        mood: p.mood,
+        promptKey: p.prompt_key,
+        expiresAt: p.expires_at,
+        createdAt: p.created_at,
+        editedAt: p.edited_at,
+      })),
+      bookmarks,
+      following,
+      followers,
+      blocked,
+      muted,
+      messages,
+    };
+
+    return reply
+      .header('content-disposition', `attachment; filename="wetext-${user.username}-export.json"`)
+      .type('application/json')
+      .send(JSON.stringify(data, null, 2));
   });
 };
 

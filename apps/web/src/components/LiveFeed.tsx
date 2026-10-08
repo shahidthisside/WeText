@@ -6,14 +6,14 @@ import { prependToInfinite, queryClient } from '../lib/query';
 import type { FeedItem, Page } from '../lib/types';
 import { useInfinite, LoadMore } from './Feed';
 import { FeedList, MasonryList } from './PostCard';
-import { ErrorState, IconButton, PageSpinner, Spinner } from './ui';
+import { ErrorState, PageSpinner } from './ui';
 
 const POLL_MS = 60_000;
 
 /**
  * A feed that stays fresh: it polls the first page every 60s while the tab is
  * visible, surfaces a floating "N new notes" pill that merges them on tap, and
- * supports pull-to-refresh on touch devices plus a desktop refresh button.
+ * supports pull-to-refresh on touch devices.
  */
 export function LiveFeed({ queryKey, url, empty, masonry }: { queryKey: QueryKey; url: string; empty: ReactNode; masonry?: boolean | 'narrow' }) {
   const q = useInfinite<FeedItem>(queryKey, url);
@@ -133,25 +133,17 @@ export function LiveFeed({ queryKey, url, empty, masonry }: { queryKey: QueryKey
         </div>
       )}
 
-      {/* New-notes pill + desktop refresh */}
-      <div className="pointer-events-none sticky top-2 z-20 mb-3 flex justify-center">
-        {fresh.length > 0 ? (
+      {/* "N new notes" pill: only exists while there is something new, so it never leaves a gap or a stray button. */}
+      {fresh.length > 0 && (
+        <div className="pointer-events-none sticky top-2 z-20 mb-3 flex justify-center">
           <button
             onClick={merge}
             className="pointer-events-auto inline-flex h-10 items-center gap-2 rounded-full bg-accent px-5 text-[0.875rem] font-bold text-on-accent shadow-lg transition-transform hover:scale-[1.03] active:scale-95"
           >
             <ArrowUp className="size-4" /> {fresh.length} new {fresh.length === 1 ? 'note' : 'notes'}
           </button>
-        ) : (
-          <IconButton
-            label="Refresh"
-            onClick={refresh}
-            className="pointer-events-auto hidden border border-line bg-card shadow-paper md:inline-flex"
-          >
-            {refreshing ? <Spinner className="size-4" /> : <RefreshCw className="size-[18px]" />}
-          </IconButton>
-        )}
-      </div>
+        </div>
+      )}
 
       {!items.length ? (
         <>{empty}</>

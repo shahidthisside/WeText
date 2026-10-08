@@ -10,12 +10,14 @@ import { setMe, useAuthedMe } from '../lib/auth';
 import type { Match, Me } from '../lib/types';
 import { cn } from '../lib/utils';
 import { InviteButton } from '../components/Invite';
+import { useDocumentTitle } from '../lib/useDocumentTitle';
 
 const STEPS = ['Profile', 'Interests', 'Personality', 'People'] as const;
 
 export default function Onboarding() {
   const me = useAuthedMe();
   const navigate = useNavigate();
+  useDocumentTitle('Welcome');
   const [step, setStep] = useState(0);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(me.avatarUrl);
   const [bio, setBio] = useState(me.bio);

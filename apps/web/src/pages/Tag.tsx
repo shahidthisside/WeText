@@ -5,10 +5,12 @@ import { Button, EmptyState, PageHeader } from '../components/ui';
 import { api } from '../lib/api';
 import { openComposer } from '../lib/composer';
 import { plural } from '../lib/utils';
+import { useDocumentTitle } from '../lib/useDocumentTitle';
 
 export default function TagPage() {
   const { tag = '' } = useParams();
   const t = tag.toLowerCase();
+  useDocumentTitle(`#${t}`);
   const meta = useQuery({ queryKey: ['tag-meta', t], queryFn: () => api.get<{ total: number }>(`/tags/${encodeURIComponent(t)}`) });
   return (
     <div className="mx-auto max-w-[1180px]">

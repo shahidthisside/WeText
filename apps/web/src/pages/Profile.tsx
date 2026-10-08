@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { ArrowLeft, Ban, CalendarDays, Link2, Lock, Mail, MapPin, MoreHorizontal, UserX, VenetianMask, VolumeX, Volume2 } from 'lucide-react';
+import { ArrowLeft, Ban, CalendarDays, Flag, Link2, Lock, Mail, MapPin, MoreHorizontal, UserX, VenetianMask, VolumeX, Volume2 } from 'lucide-react';
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { toast } from 'sonner';
@@ -32,10 +32,27 @@ import { queryClient } from '../lib/query';
 import type { Me, Post, Profile } from '../lib/types';
 import { cn, compact, lastSeen } from '../lib/utils';
 import { Lightbox } from '../components/Media';
+import { ReportDialog } from '../components/ReportDialog';
 import { VibeCheck } from '../components/VibeCheck';
 import { openComposer } from '../lib/composer';
+import { useDocumentTitle } from '../lib/useDocumentTitle';
 
 type Tab = 'posts' | 'replies' | 'media' | 'likes' | 'anonymous';
+
+/** Returns a safe http(s) href, or null if the value isn't a usable web URL. */
+function parseHttpUrl(value: string): string | null {
+  const raw = value.trim();
+  if (!raw) return null;
+  const candidate = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+  try {
+    const url = new URL(candidate);
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') return null;
+    if (!url.hostname.includes('.')) return null;
+    return url.href;
+  } catch {
+    return null;
+  }
+}
 
 export default function ProfilePage() {
   const { username = '' } = useParams();
@@ -48,7 +65,11 @@ export default function ProfilePage() {
   const [tab, setTab] = useState<Tab>('posts');
   const [editing, setEditing] = useState(false);
   const [confirmBlock, setConfirmBlock] = useState(false);
+  const [report, setReport] = useState(false);
+  const [bannerFailed, setBannerFailed] = useState(false);
   const [photo, setPhoto] = useState<string | null>(null);
+
+  useDocumentTitle(q.data?.user ? `${q.data.user.displayName} (@${q.data.user.username})` : `@${username}`);
 
   if (q.isPending)
     return (
@@ -118,9 +139,9 @@ export default function ProfilePage() {
     <div className="mx-auto max-w-[1020px] pt-4">
       <section className="overflow-hidden rounded-[32px] border border-line bg-card shadow-paper">
         <div className="relative aspect-[3/1] max-h-[230px] w-full overflow-hidden bg-accent-soft">
-          {u.bannerUrl ? (
+          {u.bannerUrl && !bannerFailed ? (
             <button className="size-full" onClick={() => setPhoto(u.bannerUrl)} aria-label="View header image">
-              <img src={u.bannerUrl} alt="" className="size-full object-cover" />
+              <img src={u.bannerUrl} alt="" className="size-full object-cover" onError={() => setBannerFailed(true)} />
             </button>
           ) : (
             <>
@@ -134,11 +155,11 @@ export default function ProfilePage() {
         </div>
 
         <div className="px-5 pb-6 sm:px-8">
-          <div className="flex items-end justify-between gap-3">
-            <button className="-mt-14 rounded-[36%] ring-[5px] ring-card" onClick={() => u.avatarUrl && setPhoto(u.avatarUrl)} aria-label="View profile photo" disabled={!u.avatarUrl}>
+          <div className="flex flex-wrap items-end justify-between gap-x-3 gap-y-2">
+            <button className="-mt-14 shrink-0 rounded-[36%] ring-[5px] ring-card" onClick={() => u.avatarUrl && setPhoto(u.avatarUrl)} aria-label="View profile photo" disabled={!u.avatarUrl}>
               <Avatar user={u} size={112} />
             </button>
-            <div className="flex items-center gap-2 pt-3">
+            <div className="ml-auto flex items-center gap-2 pt-3">
               {u.isSelf ? (
                 <Button variant="outline" onClick={() => setEditing(true)}>
                   Edit profile
@@ -182,6 +203,9 @@ export default function ProfilePage() {
                       <MenuItem icon={<Ban />} danger onSelect={() => setConfirmBlock(true)}>
                         Block @{u.username}
                       </MenuItem>
+                      <MenuItem icon={<Flag />} danger onSelect={() => setReport(true)}>
+                        Report @{u.username}
+                      </MenuItem>
                     </MenuContent>
                   </Menu>
                   {v?.canMessage && (
@@ -195,9 +219,12 @@ export default function ProfilePage() {
             </div>
           </div>
 
-          <div className="mt-4">
-            <h1 className="flex items-center gap-2 text-[2rem] font-extrabold leading-tight sm:text-[2.4rem]">
-              {u.displayName} <VerifiedLock show={u.isPrivate} />
+          <div className="mt-4 min-w-0">
+            <h1 className="flex items-start gap-2 text-[2rem] font-extrabold leading-tight sm:text-[2.4rem]">
+              <span className="min-w-0 break-words [overflow-wrap:anywhere]">{u.displayName}</span>
+              <span className="mt-1.5 shrink-0">
+                <VerifiedLock show={u.isPrivate} />
+              </span>
             </h1>
             <div className="flex flex-wrap items-center gap-2 text-[0.9375rem] text-fg-muted">
               <span>@{u.username}</span>
@@ -222,11 +249,20 @@ export default function ProfilePage() {
                     <MapPin className="size-4" /> {u.location}
                   </span>
                 )}
-                {u.website && (
-                  <a href={u.website} target="_blank" rel="noopener noreferrer nofollow" className="flex items-center gap-1.5 text-accent hover:underline">
-                    <Link2 className="size-4 text-fg-muted" /> {u.website.replace(/^https?:\/\/(www\.)?/, '').replace(/\/$/, '')}
-                  </a>
-                )}
+                {u.website &&
+                  (() => {
+                    const href = parseHttpUrl(u.website);
+                    const shown = u.website.replace(/^https?:\/\/(www\.)?/, '').replace(/\/$/, '');
+                    return href ? (
+                      <a href={href} target="_blank" rel="noopener noreferrer ugc nofollow" className="flex min-w-0 items-center gap-1.5 text-accent hover:underline">
+                        <Link2 className="size-4 shrink-0 text-fg-muted" /> <span className="truncate">{shown}</span>
+                      </a>
+                    ) : (
+                      <span className="flex min-w-0 items-center gap-1.5">
+                        <Link2 className="size-4 shrink-0 text-fg-muted" /> <span className="truncate">{shown}</span>
+                      </span>
+                    );
+                  })()}
                 <span className="flex items-center gap-1.5">
                   <CalendarDays className="size-4" /> Joined {new Date(u.createdAt).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}
                 </span>
@@ -318,6 +354,19 @@ export default function ProfilePage() {
         onConfirm={() => act('block')}
       />
       <Lightbox media={photo ? [{ url: photo }] : []} index={photo ? 0 : null} onClose={() => setPhoto(null)} onIndex={() => {}} />
+      {!u.isSelf && (
+        <ReportDialog
+          open={report}
+          onOpenChange={setReport}
+          target={{
+            type: 'user',
+            id: u.id,
+            username: u.username,
+            onBlock: () => act('block'),
+            onMute: v?.muting ? undefined : () => act('mute'),
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -333,6 +382,7 @@ function StatLink({ to, n, label }: { to: string; n: number; label: string }) {
 function AnonymousPosts() {
   const q = useQuery({ queryKey: ['profile-posts', 'me', 'anonymous'], queryFn: () => api.get<{ items: Post[] }>('/users/me/anonymous') });
   if (q.isPending) return <PageSpinner />;
+  if (q.isError) return <ErrorState error={q.error} onRetry={() => q.refetch()} />;
   if (!q.data?.items.length)
     return <EmptyState icon={<VenetianMask />} title="No whispers yet" body="Whispers you write show up here. Only you can see this tab, and nobody can tell they’re yours." />;
   return (

@@ -4,10 +4,12 @@ import { useState, type FormEvent } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
 import { Button, Logo, TextInput } from '../components/ui';
 import { api, ApiError, errorMessage } from '../lib/api';
-import { setMe } from '../lib/auth';
+import { setIdentity } from '../lib/auth';
 import type { Me } from '../lib/types';
+import { useDocumentTitle } from '../lib/useDocumentTitle';
 
-function AuthShell({ title, sub, children, footer }: { title: string; sub?: string; children: React.ReactNode; footer: React.ReactNode }) {
+function AuthShell({ title, sub, children, footer, docTitle }: { title: string; sub?: string; children: React.ReactNode; footer: React.ReactNode; docTitle: string }) {
+  useDocumentTitle(docTitle);
   return (
     <div className="grid min-h-dvh lg:grid-cols-[1fr_1.05fr]">
       <div className="flex items-center justify-center px-5 py-10">
@@ -62,7 +64,7 @@ export function Login() {
     setError(null);
     try {
       const r = await api.post<{ user: Me }>('/auth/login', { login, password });
-      setMe(r.user);
+      setIdentity(r.user);
       const next = params.get('next');
       navigate(next && next.startsWith('/') && !next.startsWith('//') ? next : '/home', { replace: true });
     } catch (err) {
@@ -73,7 +75,7 @@ export function Login() {
   }
 
   return (
-    <AuthShell title="Welcome back." sub="Pick up where you left off." footer={<>Don’t have an account? <Link to="/signup" className="text-accent hover:underline">Sign up</Link></>}>
+    <AuthShell docTitle="Sign in" title="Welcome back." sub="Pick up where you left off." footer={<>Don’t have an account? <Link to="/signup" className="text-accent hover:underline">Sign up</Link></>}>
       <form onSubmit={submit} className="space-y-5" noValidate>
         <TextInput label="Username or email" value={login} onChange={(e) => setLogin(e.target.value)} autoComplete="username" autoFocus required />
         <PasswordInput value={password} onChange={setPassword} autoComplete="current-password" />
@@ -128,7 +130,7 @@ export function Signup() {
     setError(null);
     try {
       const r = await api.post<{ user: Me }>('/auth/signup', { ...form, username: uname });
-      setMe(r.user);
+      setIdentity(r.user);
       navigate('/onboarding', { replace: true });
     } catch (err) {
       if (err instanceof ApiError && err.code === 'username_taken') setErrors({ username: err.message });
@@ -148,7 +150,7 @@ export function Signup() {
   const unameError = errors.username ?? (availability.data && !availability.data.available ? availability.data.reason : null);
 
   return (
-    <AuthShell title="Join WeText." sub="It takes a minute. You can change everything later." footer={<>Have an account already? <Link to="/login" className="text-accent hover:underline">Sign in</Link></>}>
+    <AuthShell docTitle="Join" title="Join WeText." sub="It takes a minute. You can change everything later." footer={<>Have an account already? <Link to="/login" className="text-accent hover:underline">Sign in</Link></>}>
       <form onSubmit={submit} className="space-y-5" noValidate>
         <TextInput label="Name" value={form.displayName} onChange={(e) => set('displayName')(e.target.value)} error={errors.displayName} counter={50} autoComplete="name" autoFocus />
         <TextInput
@@ -198,6 +200,7 @@ export function ForgotPassword() {
 
   return (
     <AuthShell
+      docTitle="Forgot password"
       title={sent ? 'Check your email.' : 'Forgot your password?'}
       sub={sent ? undefined : 'Enter the email you signed up with and we’ll send you a link to choose a new one.'}
       footer={<>Remembered it? <Link to="/login" className="text-accent hover:underline">Sign in</Link></>}
@@ -253,7 +256,7 @@ export function ResetPassword() {
 
   if (!token) {
     return (
-      <AuthShell title="This link isn’t valid." sub="Reset links come from the email we send. Request a new one to continue." footer={<Link to="/login" className="text-accent hover:underline">Back to sign in</Link>}>
+      <AuthShell docTitle="Reset password" title="This link isn’t valid." sub="Reset links come from the email we send. Request a new one to continue." footer={<Link to="/login" className="text-accent hover:underline">Back to sign in</Link>}>
         <Link to="/forgot-password">
           <Button size="lg" variant="inverse" block>Get a new link</Button>
         </Link>
@@ -263,6 +266,7 @@ export function ResetPassword() {
 
   return (
     <AuthShell
+      docTitle="Reset password"
       title={done ? 'Password changed.' : 'Choose a new password.'}
       sub={done ? 'You’ve been signed out everywhere. Sign in with your new password.' : 'At least 8 characters, with a letter and a number.'}
       footer={<Link to="/login" className="text-accent hover:underline">Back to sign in</Link>}

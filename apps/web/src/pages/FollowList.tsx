@@ -6,10 +6,12 @@ import { EmptyState, PageHeader, PageSpinner, Tabs } from '../components/ui';
 import { api } from '../lib/api';
 import type { Profile, UserCard } from '../lib/types';
 import { useInfiniteQuery } from '@tanstack/react-query';
+import { useDocumentTitle } from '../lib/useDocumentTitle';
 
 export default function FollowListPage({ kind }: { kind: 'followers' | 'following' }) {
   const { username = '' } = useParams();
   const navigate = useNavigate();
+  useDocumentTitle(`@${username} · ${kind === 'followers' ? 'Followers' : 'Following'}`);
   const profile = useQuery({
     queryKey: ['profile', username.toLowerCase()],
     queryFn: () => api.get<{ user: Profile; canViewContent: boolean }>(`/users/${encodeURIComponent(username)}`),

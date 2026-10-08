@@ -6,9 +6,11 @@ import { ConfirmDialog, EmptyState, IconButton, Menu, MenuContent, MenuItem, Men
 import { api, errorMessage } from '../lib/api';
 import { useAuthedMe } from '../lib/auth';
 import { queryClient } from '../lib/query';
+import { useDocumentTitle } from '../lib/useDocumentTitle';
 
 export default function Bookmarks() {
   const me = useAuthedMe();
+  useDocumentTitle('Saved');
   const [confirm, setConfirm] = useState(false);
   async function clearAll() {
     try {

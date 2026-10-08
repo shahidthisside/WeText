@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { MapPin, MessageCircle, RotateCcw, SlidersHorizontal, UserPlus, Users, X } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { toast } from 'sonner';
 import { InterestPicker, TraitSliders } from '../components/ProfileFields';
@@ -13,6 +13,7 @@ import { queryClient } from '../lib/query';
 import type { FollowState, Match, Me } from '../lib/types';
 import { cn, lastSeen } from '../lib/utils';
 import { InviteButton } from '../components/Invite';
+import { useDocumentTitle } from '../lib/useDocumentTitle';
 
 function DeckCard({ m, onPass, onFollow, onHi }: { m: Match; onPass: () => void; onFollow: () => void; onHi: () => void }) {
   const u = m.user;
@@ -106,6 +107,7 @@ function DeckCard({ m, onPass, onFollow, onHi }: { m: Match; onPass: () => void;
 export default function Connect() {
   const me = useAuthedMe();
   const navigate = useNavigate();
+  useDocumentTitle('Connect');
   const [editing, setEditing] = useState(false);
   const [tab, setTab] = useState<'all' | 'online'>('all');
   const [gone, setGone] = useState<Set<string>>(new Set());
@@ -116,25 +118,31 @@ export default function Connect() {
   const current = queue[0];
   const dismiss = (id: string) => setGone((g) => new Set(g).add(id));
 
-  async function pass(m: Match) {
-    dismiss(m.user.id);
-    try {
-      await api.post(`/connect/${m.user.id}/pass`);
-    } catch (e) {
-      toast.error(errorMessage(e));
-    }
-  }
-  async function follow(m: Match) {
-    try {
-      const r = await api.post<{ status: FollowState }>(`/users/${m.user.username}/follow`);
-      toast(r.status === 'pending' ? `Request sent to ${m.user.displayName}` : `Following ${m.user.displayName}`);
+  const pass = useCallback(
+    async (m: Match) => {
       dismiss(m.user.id);
-      queryClient.invalidateQueries({ queryKey: ['feed', 'following'] });
-      queryClient.invalidateQueries({ queryKey: ['suggestions'] });
-    } catch (e) {
-      toast.error(errorMessage(e));
-    }
-  }
+      try {
+        await api.post(`/connect/${m.user.id}/pass`);
+      } catch (e) {
+        toast.error(errorMessage(e));
+      }
+    },
+    [],
+  );
+  const follow = useCallback(
+    async (m: Match) => {
+      try {
+        const r = await api.post<{ status: FollowState }>(`/users/${m.user.username}/follow`);
+        toast(r.status === 'pending' ? `Request sent to ${m.user.displayName}` : `Following ${m.user.displayName}`);
+        dismiss(m.user.id);
+        queryClient.invalidateQueries({ queryKey: ['feed', 'following'] });
+        queryClient.invalidateQueries({ queryKey: ['suggestions'] });
+      } catch (e) {
+        toast.error(errorMessage(e));
+      }
+    },
+    [],
+  );
   async function hi(m: Match) {
     try {
       const r = await api.post<{ conversation: { id: string } }>('/conversations', { username: m.user.username });
@@ -159,7 +167,7 @@ export default function Connect() {
     };
     window.addEventListener('keydown', h);
     return () => window.removeEventListener('keydown', h);
-  }); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [current, editing, pass, follow]);
 
   return (
     <div className="mx-auto max-w-[1020px]">

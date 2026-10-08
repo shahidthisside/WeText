@@ -3,9 +3,10 @@ import { useSearchParams } from 'react-router';
 import { InfiniteFeed } from '../components/Feed';
 import { SearchBox, TrendingList, WhoToFollow } from '../components/Sidebar';
 import { UserRow } from '../components/UserRow';
-import { EmptyState, PageHeader, PageSpinner, Tabs } from '../components/ui';
+import { EmptyState, ErrorState, PageHeader, PageSpinner, Tabs } from '../components/ui';
 import { api } from '../lib/api';
 import type { DailyPrompt, UserCard } from '../lib/types';
+import { useDocumentTitle } from '../lib/useDocumentTitle';
 
 type T = 'top' | 'latest' | 'people' | 'media';
 
@@ -14,6 +15,8 @@ export default function Explore() {
   const q = params.get('q')?.trim() ?? '';
   const tab = (params.get('f') as T) || 'top';
   const prompt = params.get('prompt') === '1';
+
+  useDocumentTitle(q ? `Search: ${q}` : prompt ? 'Today’s answers' : 'Discover');
 
   return (
     <div className="mx-auto max-w-[1020px]">
@@ -88,6 +91,7 @@ function PeopleResults({ q, compact }: { q: string; compact?: boolean }) {
     queryFn: () => api.get<{ users: UserCard[] }>(`/search?q=${encodeURIComponent(q)}&type=${compact ? 'top' : 'people'}`),
   });
   if (r.isPending) return compact ? null : <PageSpinner />;
+  if (r.isError) return compact ? null : <ErrorState error={r.error} onRetry={() => r.refetch()} />;
   const users = r.data?.users ?? [];
   if (!users.length) return compact ? null : <EmptyState title={`No people found for “${q}”`} />;
   return (

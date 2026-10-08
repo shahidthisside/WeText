@@ -4,9 +4,10 @@ import { useParams } from 'react-router';
 import { Composer } from '../components/Composer';
 import { LoadMore, useInfinite } from '../components/Feed';
 import { FocusedPost, PostCard } from '../components/PostCard';
-import { EmptyState, PageHeader, PageSpinner } from '../components/ui';
+import { EmptyState, ErrorState, PageHeader, PageSpinner } from '../components/ui';
 import { api, ApiError } from '../lib/api';
 import type { Post } from '../lib/types';
+import { snippet, useDocumentTitle } from '../lib/useDocumentTitle';
 
 export default function PostPage() {
   const { id = '' } = useParams();
@@ -15,6 +16,10 @@ export default function PostPage() {
     queryFn: () => api.get<{ post: Post | null; ancestors: Post[]; missingParent: boolean }>(`/posts/${id}`),
   });
   const focusRef = useRef<HTMLDivElement>(null);
+
+  const post = q.data?.post;
+  const titleName = post?.author?.displayName ?? (post?.isAnonymous ? 'Whisper' : 'Note');
+  useDocumentTitle(post ? (post.content ? `${titleName}: ${snippet(post.content)}` : titleName) : 'Note');
 
   // Keep the focused note in view when earlier notes render above it.
   useLayoutEffect(() => {
@@ -55,7 +60,7 @@ export default function PostPage() {
 function Replies({ postId }: { postId: string }) {
   const q = useInfinite<Post>(['replies', postId], `/posts/${postId}/replies`);
   if (q.isPending) return <PageSpinner />;
-  if (q.isError) return null;
+  if (q.isError) return <ErrorState error={q.error} onRetry={() => q.refetch()} />;
   const items = q.data.pages.flatMap((p) => p.items);
   if (!items.length) return <p className="py-10 text-center font-serif text-[1.375rem] italic text-fg-subtle">no replies yet, be the first</p>;
   return (

@@ -2,6 +2,7 @@ import { ArrowRight, Hourglass, Sparkles, VenetianMask } from 'lucide-react';
 import { Link } from 'react-router';
 import { Avatar, Button, Logo } from '../components/ui';
 import { MoodChip } from '../lib/moods';
+import { useDocumentTitle } from '../lib/useDocumentTitle';
 
 function HeroCards() {
   return (
@@ -72,6 +73,7 @@ const FEATURES = [
 ];
 
 export default function Landing() {
+  useDocumentTitle('Say what’s on your mind');
   return (
     <div className="min-h-dvh overflow-x-hidden">
       <header className="mx-auto flex h-20 max-w-[1180px] items-center justify-between px-5 sm:px-8">

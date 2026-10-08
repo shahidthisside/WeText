@@ -1,6 +1,7 @@
 import { Link } from 'react-router';
 import { Button, Logo } from '../components/ui';
 import { useMe } from '../lib/auth';
+import { useDocumentTitle } from '../lib/useDocumentTitle';
 
 const FEATURES = [
   ['Say it your way', 'Write a note with your name, or a whisper without it. Add a mood, let it fade after a day, or answer the daily prompt.'],
@@ -11,6 +12,7 @@ const FEATURES = [
 
 export default function About() {
   const { me } = useMe();
+  useDocumentTitle('About');
   return (
     <div className="mx-auto max-w-[680px] px-6 py-12">
       <Link to={me ? '/home' : '/'} aria-label="WeText home">

@@ -12,6 +12,7 @@ import { useCounts } from '../lib/auth';
 import { queryClient } from '../lib/query';
 import type { Counts, NotificationItem, UserCard } from '../lib/types';
 import { cn, shortTime } from '../lib/utils';
+import { useDocumentTitle } from '../lib/useDocumentTitle';
 
 const ICONS = {
   like: { icon: Heart, cls: 'text-like', fill: true },
@@ -137,6 +138,7 @@ export default function Notifications() {
   // Mark everything read once the list has loaded.
   const loaded = !!q.data;
   const unread = counts.data?.notifications ?? 0;
+  useDocumentTitle(unread > 0 ? `Activity (${unread})` : 'Activity');
   useEffect(() => {
     if (!loaded || !unread) return;
     const t = setTimeout(() => {

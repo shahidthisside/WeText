@@ -6,7 +6,8 @@ import { cn } from '../../lib/utils';
 const playing = { current: null as HTMLAudioElement | null };
 
 function fmt(ms: number) {
-  const s = Math.max(0, Math.round(ms / 1000));
+  // Round up, so a note that still has time left never reads 0:00.
+  const s = Math.max(0, Math.ceil(ms / 1000 - 0.05));
   const m = Math.floor(s / 60);
   return `${m}:${String(s % 60).padStart(2, '0')}`;
 }
@@ -29,30 +30,51 @@ export function AudioBubble({ url, durationMs, mine, seed }: { url: string; dura
   const audio = useRef<HTMLAudioElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [pos, setPos] = useState(0); // 0..1
+  const [now, setNow] = useState(0); // seconds played so far
+  const [realLen, setRealLen] = useState(0); // seconds, once the browser knows the real length
   const [speed, setSpeed] = useState<(typeof SPEEDS)[number]>(1);
   const wave = useMemo(() => bars(seed), [seed]);
   const id = useId();
-  const total = durationMs || 1;
+  // The length the sender recorded. The audio file's own length replaces it as soon as the browser has read it.
+  const total = realLen > 0 ? realLen * 1000 : durationMs > 0 ? durationMs : 1000;
 
   useEffect(() => {
     const el = audio.current;
     if (!el) return;
+    const length = () => (el.duration && Number.isFinite(el.duration) ? el.duration : 0);
     const onTime = () => {
-      const d = el.duration && Number.isFinite(el.duration) ? el.duration : total / 1000;
-      setPos(d ? el.currentTime / d : 0);
+      // Always show the real playback position, so the timer moves from the very first moment it plays.
+      const d = length() || total / 1000;
+      setNow(el.currentTime);
+      setPos(d ? Math.min(1, el.currentTime / d) : 0);
+    };
+    const onMeta = () => {
+      const d = length();
+      if (d) setRealLen(d);
     };
     const onEnd = () => {
       setIsPlaying(false);
       setPos(0);
+      setNow(0);
       if (playing.current === el) playing.current = null;
     };
+    const onPause = () => setIsPlaying(false);
+    const onPlay = () => setIsPlaying(true);
     el.addEventListener('timeupdate', onTime);
+    el.addEventListener('loadedmetadata', onMeta);
+    el.addEventListener('durationchange', onMeta);
     el.addEventListener('ended', onEnd);
-    el.addEventListener('pause', () => setIsPlaying(false));
-    el.addEventListener('play', () => setIsPlaying(true));
+    el.addEventListener('pause', onPause);
+    el.addEventListener('play', onPlay);
+    // A voice note recorded in a browser often has no length in its header: ask for the real one by seeking far ahead once.
+    onMeta();
     return () => {
       el.removeEventListener('timeupdate', onTime);
+      el.removeEventListener('loadedmetadata', onMeta);
+      el.removeEventListener('durationchange', onMeta);
       el.removeEventListener('ended', onEnd);
+      el.removeEventListener('pause', onPause);
+      el.removeEventListener('play', onPlay);
     };
   }, [total]);
 
@@ -75,11 +97,12 @@ export function AudioBubble({ url, durationMs, mine, seed }: { url: string; dura
     if (audio.current) audio.current.playbackRate = next;
   }
 
-  const elapsed = isPlaying || pos > 0 ? pos * total : total;
+  // At rest: the whole length. While playing or paused part-way: the time still left, counting down.
+  const elapsed = isPlaying || now > 0 ? Math.max(0, total - now * 1000) : total;
 
   return (
     <div className={cn('flex items-center gap-2.5 px-3 py-2.5', mine ? 'text-on-accent' : 'text-fg')}>
-      <audio ref={audio} src={url} preload="none" aria-label="Voice message" />
+      <audio ref={audio} src={url} preload="metadata" aria-label="Voice message" />
       <button
         type="button"
         onClick={toggle}

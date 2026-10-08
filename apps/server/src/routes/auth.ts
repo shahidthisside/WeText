@@ -198,7 +198,12 @@ const routes: FastifyPluginAsync = async (app) => {
     const body = z.object({ password: z.string().min(1).max(200) }).parse(req.body);
     if (!(await verifyPassword(body.password, user.password_hash))) throw badRequest('Password is incorrect', 'wrong_password');
     app.ctx.rt.disconnectUser(user.id);
-    await db.prepare('DELETE FROM users WHERE id = ?').run(user.id);
+    await db.transaction(async () => {
+      await db.prepare('DELETE FROM users WHERE id = ?').run(user.id);
+      // Chats that now have nobody in them (a one-to-one chat whose other person is gone, or a group whose
+      // last member left) are removed too, so empty conversations do not pile up.
+      await db.prepare('DELETE FROM conversations WHERE id NOT IN (SELECT conversation_id FROM conversation_members)').run();
+    });
     clearSessionCookie(reply);
     return { ok: true };
   });

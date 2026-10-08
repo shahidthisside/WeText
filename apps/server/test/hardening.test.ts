@@ -239,3 +239,34 @@ describe('cache-control: authed API responses are no-store', () => {
     expect(r.headers['cache-control']).toBe('no-store');
   });
 });
+
+describe('account deletion cleans up empty conversations', () => {
+  it('removes a chat or group nobody belongs to any more, but keeps ones that still have a member', async () => {
+    const x = await signup(app, 'delx', { interests: ['Coffee'], onboarded: true });
+    const y = await signup(app, 'dely', { interests: ['Coffee'], onboarded: true });
+    const z = await signup(app, 'delz', { interests: ['Coffee'], onboarded: true });
+    for (const [a, b] of [[x, y], [y, x], [x, z], [z, x], [y, z], [z, y]] as const) await api(app, a).post(`/api/users/${b.username}/follow`);
+
+    // A one-to-one chat with a message, and a group of three.
+    const dm = (await api(app, x).post('/api/conversations', { username: y.username })).json().conversation;
+    expect((await api(app, x).post(`/api/conversations/${dm.id}/messages`, { body: 'hi' })).statusCode).toBe(201);
+    const group = (await api(app, x).post('/api/conversations/group', { title: 'Trio', memberIds: [y.id, z.id] })).json().conversation;
+
+    const count = async (id: string) => (await app.ctx.db.prepare('SELECT COUNT(*) FROM conversations WHERE id = ?').pluck().get(id)) as number;
+
+    // x leaves: y still belongs to the chat and the group, so both stay.
+    expect((await api(app, x).post('/api/auth/delete-account', { password: 'passw0rd!' })).statusCode).toBe(200);
+    expect(await count(dm.id)).toBe(1);
+    expect(await count(group.id)).toBe(1);
+
+    // y leaves: the chat is now empty and goes away; the group still has z.
+    expect((await api(app, y).post('/api/auth/delete-account', { password: 'passw0rd!' })).statusCode).toBe(200);
+    expect(await count(dm.id)).toBe(0);
+    expect(await count(group.id)).toBe(1);
+
+    // z leaves: nobody is left in the group, so it goes too, along with its messages.
+    expect((await api(app, z).post('/api/auth/delete-account', { password: 'passw0rd!' })).statusCode).toBe(200);
+    expect(await count(group.id)).toBe(0);
+    expect(await app.ctx.db.prepare('SELECT COUNT(*) FROM messages WHERE conversation_id IN (?, ?)').pluck().get(dm.id, group.id)).toBe(0);
+  });
+});

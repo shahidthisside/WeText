@@ -387,11 +387,66 @@ const migrations: string[] = [
   );
   CREATE INDEX post_edits_post ON post_edits(post_id, replaced_at);
   `,
+  /* sql */ `
+  -- Chat features: edit, forward, share a note, voice notes, disappearing messages,
+  -- pin / archive / mark unread, delete for me, starred messages.
+  ALTER TABLE messages ADD COLUMN edited_at INTEGER;
+  ALTER TABLE messages ADD COLUMN forwarded INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE messages ADD COLUMN post_id TEXT REFERENCES posts(id) ON DELETE SET NULL;
+  ALTER TABLE messages ADD COLUMN audio_url TEXT;
+  ALTER TABLE messages ADD COLUMN audio_ms INTEGER;
+  ALTER TABLE messages ADD COLUMN expires_at INTEGER;
+  CREATE INDEX messages_expires ON messages(expires_at) WHERE expires_at IS NOT NULL;
+  ALTER TABLE conversation_members ADD COLUMN pinned_at INTEGER;
+  ALTER TABLE conversation_members ADD COLUMN archived_at INTEGER;
+  ALTER TABLE conversation_members ADD COLUMN marked_unread INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE conversations ADD COLUMN ttl_seconds INTEGER NOT NULL DEFAULT 0;
+  CREATE TABLE message_hidden (
+    message_id TEXT NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+    user_id    TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    PRIMARY KEY (message_id, user_id)
+  );
+  CREATE TABLE message_stars (
+    message_id TEXT NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+    user_id    TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    created_at INTEGER NOT NULL,
+    PRIMARY KEY (message_id, user_id)
+  );
+  CREATE INDEX message_stars_user ON message_stars(user_id, created_at DESC);
+  `,
+  /* sql */ `
+  -- Reports of notes, people and messages, for the author to review.
+  CREATE TABLE reports (
+    id          TEXT PRIMARY KEY,
+    reporter_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    target_type TEXT NOT NULL CHECK (target_type IN ('post', 'user', 'message')),
+    target_id   TEXT NOT NULL,
+    reason      TEXT NOT NULL,
+    details     TEXT NOT NULL DEFAULT '',
+    created_at  INTEGER NOT NULL,
+    UNIQUE (reporter_id, target_type, target_id)
+  );
+  CREATE INDEX reports_target ON reports(target_type, target_id);
+  `,
+  /* sql */ `
+  -- Group chats. A group is a conversation with is_group = 1 and any number of members; its pair_key is 'g:<id>'.
+  ALTER TABLE conversations ADD COLUMN is_group INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE conversations ADD COLUMN title TEXT NOT NULL DEFAULT '';
+  ALTER TABLE conversations ADD COLUMN created_by TEXT REFERENCES users(id) ON DELETE SET NULL;
+  ALTER TABLE conversation_members ADD COLUMN role TEXT NOT NULL DEFAULT 'member';
+  ALTER TABLE conversation_members ADD COLUMN joined_at INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE conversation_members ADD COLUMN left_at INTEGER;
+  -- 'system' messages are lines like "Ana added Ben" shown in the thread; they have no sender attachments.
+  ALTER TABLE messages ADD COLUMN kind TEXT NOT NULL DEFAULT 'user';
+  `,
 ];
 
-/** Fading posts are hard-deleted once they expire. */
+/** Fading posts and expired disappearing messages are hard-deleted once they expire. */
 export async function purgeExpired(db: DB) {
-  return (await db.prepare('DELETE FROM posts WHERE expires_at IS NOT NULL AND expires_at <= ?').run(Date.now())).changes;
+  const now = Date.now();
+  const posts = (await db.prepare('DELETE FROM posts WHERE expires_at IS NOT NULL AND expires_at <= ?').run(now)).changes;
+  const messages = (await db.prepare('DELETE FROM messages WHERE expires_at IS NOT NULL AND expires_at <= ?').run(now)).changes;
+  return posts + messages;
 }
 
 /**

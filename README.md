@@ -12,7 +12,7 @@
 ![React](https://img.shields.io/badge/react-19-149eca)
 ![Fastify](https://img.shields.io/badge/fastify-5-000000)
 ![libSQL](https://img.shields.io/badge/sqlite%2FTurso-FTS5-003b57)
-![Tests](https://img.shields.io/badge/tests-160%20passing-2ea44f)
+![Tests](https://img.shields.io/badge/tests-224%20passing-2ea44f)
 [![License: Proprietary](https://img.shields.io/badge/license-proprietary-red)](LICENSE)
 
 [Live site](https://wetextapp.onrender.com) · [Features](#features) · [Quick start](#quick-start) · [Architecture](#architecture) · [API](#api-overview) · [Security](#security) · [Deployment](#deployment)
@@ -68,7 +68,22 @@ The app keeps **no state on the server**. Accounts, posts, messages and photos a
 | Connect | A card deck matching you on interests (60%) and five personality sliders (40%): homebody or social, night owl or early bird, practical or imaginative, planner or spontaneous, listener or talker. Keyboard: `←` pass, `→` follow |
 | Vibe check | Per-trait closeness between you and another person, without revealing their raw answers |
 | Profiles | Avatar and banner, bio, location, website, interests, mutual followers, and followers and following lists |
-| Chats | Full-screen, app-like chat on phones (a two-pane layout on desktop). Text, photos (several at once, with captions, paste or drag and drop), **voice messages** (record, play, 1x/1.5x/2x speed), and **notes shared into a chat**. Reply, **edit** (15 minutes), **forward** (up to 5 chats), **star**, copy, message info, 8 emoji reactions, **unsend for everyone** or **delete for me**. Pin (up to 3), archive, mute and mark as unread; in-chat search and a shared media gallery; **disappearing messages** (24 hours, 7 days or 90 days); per-chat drafts, typing and recording indicators, sent/seen receipts, unread dividers, a requests inbox for people you do not follow, and live presence. **Group chats** of up to 50 people: a name, admins and members, system lines ("Ana added Ben"), sender names, "Seen by", people added later only see messages from when they joined, and every message feature above works in groups |
+| Chats | Full-screen, app-like chat on phones (a two-pane layout on desktop). Text, photos (several at once, with captions, paste or drag and drop), **voice messages** (record, play, 1x/1.5x/2x speed), and **notes shared into a chat**. Reply, **edit** (15 minutes), **forward** (up to 5 chats), **star**, copy, message info, 8 emoji reactions, **unsend for everyone** or **delete for me**. Pin (up to 3), archive, mute and mark as unread; in-chat search and a shared media gallery; **disappearing messages** (24 hours, 7 days or 90 days); per-chat drafts, typing and recording indicators, sent/seen receipts, unread dividers, a requests inbox for people you do not follow, and live presence. **Voice and video calls** (see below). **Group chats** of up to 50 people: a name, admins and members, system lines ("Ana added Ben"), sender names, "Seen by", people added later only see messages from when they joined, and every message feature above works in groups |
+
+### Calls
+
+One-to-one **voice and video calls** from the header of any chat, built to hold up on a poor connection.
+
+| Feature | Details |
+| --- | --- |
+| Making and answering | Ringing on every open tab or phone, with a ringtone, a buzz and a flashing tab title. Answer in one place and the others stop. Two people calling each other at the same moment end up in one call. A video call can be answered with **voice only** |
+| In the call | Mute, camera on and off (a voice call can add video later), flip camera, a timer, a connection-quality indicator, and a **Save data** button that switches both sides to voice only. Minimise the call to a small bar and keep using the app. The other person sees when you are muted, reconnecting or have a weak connection |
+| Weak internet | The connection is measured every two seconds. When it gets worse the picture steps down (800 → 450 → 220 → 90 kbit/s, with a smaller frame and fewer frames a second), and if even the smallest picture does not fit, video pauses so the voice stays clear. It comes back by itself when the connection improves. The voice has priority, uses a small codec setting (mono, loss repair, silence not sent) and gets leaner still when things are bad. A dropped connection is repaired by restarting the search for a route, again and again, for up to 40 seconds, and a brief loss of the app's own connection does not end the call. On a slow or data-saving connection the call starts small |
+| In the chat | Every call is written into the chat: "Outgoing video call · 2:31", "Missed voice call" (in red), "Declined", "Cancelled", "No answer", "Line busy", each with a **Call back** button. Missed calls count as unread; finished ones do not. Chats with disappearing messages apply the same timer to call lines |
+| Who can call | One-to-one chats only. Not if either of you has blocked the other, and not unless the person called follows you or has already replied in the chat, so a stranger cannot ring you. Blocking someone ends a live call. People who hide their online status are rung silently and never reveal whether they are online |
+| Reliability | Unanswered calls give up after 45 seconds. A closed or reloaded page ends its call within seconds, not minutes. One call at a time per person, with a limit on how fast someone can ring |
+
+Sound and picture travel **directly between the two phones** (WebRTC, encrypted), not through your server, so the free host carries only the ringing and set-up messages. Roughly one call in seven cannot connect directly (strict office or mobile networks) and needs a relay; see `TURN_*` settings below. Calls need HTTPS (or `localhost`), a microphone, and a current browser.
 
 ### Around the app
 
@@ -121,7 +136,7 @@ Run these from the repository root.
 | `npm run dev` | Starts the API (tsx watch) and Vite, proxying `/api`, `/uploads` and `/socket.io` |
 | `npm run build` | Builds the web app and compiles the server |
 | `npm start` | Production: one Node process serves the API, websockets and the built web app |
-| `npm test` | Runs the server test suite (160 tests) |
+| `npm test` | Runs the server test suite (224 tests) |
 | `npm run typecheck` | Type-checks both workspaces |
 
 ## Configuration
@@ -138,6 +153,8 @@ All settings are optional environment variables read by the server. Defaults wor
 | `MAIL_FROM_NAME` | `WeText` | Sender name |
 | `PHOTO_QUOTA_MB` | `150` | Photo and voice-message storage allowed per account |
 | `ADMIN_USERNAME` | | Optional. The one account allowed to read `GET /api/admin/reports` |
+| `TURN_API_URL` | | Optional relay for calls that cannot connect directly. A web address that returns a list of connection servers, for example Metered Open Relay: `https://YOURAPP.metered.live/api/v1/turn/credentials?apiKey=KEY` (free plan, 20 GB a month, needs a sign-up; check their terms for whether a card is asked). The key stays on the server |
+| `TURN_URLS`, `TURN_USERNAME`, `TURN_CREDENTIAL` | | Alternative to `TURN_API_URL` for a relay you run yourself (comma-separated URLs such as `turn:relay.example.com:3478`) |
 | `PORT` | `4000` | HTTP port |
 | `HOST` | `127.0.0.1` | Use `0.0.0.0` in containers and on hosts like Render |
 | `WEB_ORIGIN` | `http://localhost:5173` | Allowed browser origin in development |
@@ -187,6 +204,7 @@ All endpoints are JSON under `/api` and use the session cookie. This is a summar
 | People | `GET /users/:username` · `POST /users/:username/follow` · `GET /users/:username/vibe` · `POST /users/:username/block` · `POST /users/:username/mute` |
 | Discover | `GET /search` · `GET /trending` · `GET /suggestions` · `GET /connect` · `POST /connect/:userId/pass` · `GET /tags/:tag` |
 | Notifications | `GET /notifications` · `POST /notifications/read` · `GET /me/counts` · `GET /me/follow-requests` · `POST /me/follow-requests/:userId/:action` |
+| Calls | `GET /calls/ice` (connection servers for the signed-in user). Ringing and set-up use the socket events below |
 | Chats | `GET /conversations?tab=primary\|requests\|archived` · `POST /conversations` · `POST /conversations/group` · `POST /conversations/:id/members` · `DELETE /conversations/:id/members/:userId` (remove or leave) · `PATCH /conversations/:id/members/:userId` (admin role) · `PATCH /conversations/:id` (mute, pin, archive, mark unread, disappearing timer) · `GET /conversations/:id/messages` · `GET /conversations/:id/search` · `GET /conversations/:id/media` · `POST /conversations/:id/read` |
 | Messages | `POST /conversations/:id/messages` (text, photo, voice, shared note, reply) · `PATCH /messages/:id` (edit) · `DELETE /messages/:id` (unsend) · `POST /messages/:id/hide` (delete for me) · `POST /messages/:id/forward` · `PUT /messages/:id/star` · `PUT /messages/:id/reaction` · `GET /me/starred-messages` |
 | Safety | `POST /reports` · `GET /me/export` · `GET /admin/reports` (owner only) |
@@ -206,6 +224,7 @@ Socket.IO authenticates with the same session cookie. The server pushes these ev
 | `conversation:read` | Who read a conversation, used for seen receipts |
 | `notification` | The new unread notification count |
 | `presence` · `presence:snapshot` | Online state for people you are watching (respects the hide-online-status setting) |
+| `call:incoming` · `call:accepted` · `call:signal` · `call:active` · `call:peer` · `call:ended` | The life of a call. The client sends `call:invite`, `call:accept`, `call:end`, `call:signal`, `call:connected`, `call:peer` and `call:sync`, each answered with an acknowledgement. Every browser tab names itself with a `deviceId` when it connects, so a call survives the socket reconnecting |
 | `typing` · `recording` | Sent by the client while composing or recording a voice message, relayed to the other participant |
 
 ## Security
@@ -226,7 +245,7 @@ Socket.IO authenticates with the same session cookie. The server pushes these ev
 npm test
 ```
 
-160 integration tests cover authentication, post visibility and privacy rules, search, matching, moods, prompts, fading notes, whispers, edit history, reports and data export, every chat feature (edit, forward, star, pin, archive, disappearing messages, voice uploads and range requests, shared notes), group chats (members, roles, history cutoff, leaving), socket events, photo storage, the database adapter, concurrency races and password reset. They run against a temporary database and need no setup.
+224 tests cover authentication, post visibility and privacy rules, search, matching, moods, prompts, fading notes, whispers, edit history, reports and data export, every chat feature (edit, forward, star, pin, archive, disappearing messages, voice uploads and range requests, shared notes), group chats (members, roles, history cutoff, leaving), calls (ringing, answering, declining, busy, offline, several tabs, reconnecting, dropped connections, permissions, and the logic that adapts to a weak connection), socket events, photo storage, the database adapter, concurrency races and password reset. They run against a temporary database and need no setup.
 
 To run them against a real libSQL server instead (the same protocol Turso uses), start one and point the tests at it:
 

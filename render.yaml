@@ -26,3 +26,5 @@ services:
         sync: false
       - key: MAIL_FROM           # optional: a sender address verified in Brevo
         sync: false
+      - key: TURN_API_URL        # optional: relay for calls that cannot connect directly
+        sync: false

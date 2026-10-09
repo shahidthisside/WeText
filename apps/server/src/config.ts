@@ -30,10 +30,15 @@ export const config = {
   /** Optional: the one account allowed to read submitted reports via GET /api/admin/reports. */
   adminUsername: env.ADMIN_USERNAME || undefined,
   /**
-   * Optional relay (TURN) for the roughly one call in seven that cannot connect directly. Either set the three static
-   * values, or TURN_API_URL to a service that returns an `iceServers` array (for example Metered Open Relay:
-   * https://<app>.metered.live/api/v1/turn/credentials?apiKey=...). Without any of them calls still work for most people.
+   * Relays (TURN) for calls that cannot connect directly, for example two phones on a Wi-Fi that keeps its devices
+   * apart. Calls always try a direct route first; a relay only carries a call when no direct route works.
+   *
+   * - JAMI_RELAY (default on): the public relay of the Jami project (turn.jami.net, with the login its documentation
+   *   publishes). Free, but run by a third party with no promise it stays available. Set JAMI_RELAY=off to stop using it.
+   * - Optionally your own as well: the three static TURN_* values, and/or TURN_API_URL pointing at a service that
+   *   returns an `iceServers` array (for example Metered: https://<app>.metered.live/api/v1/turn/credentials?apiKey=...).
    */
+  jamiRelay: !/^(off|false|0|no)$/i.test((env.JAMI_RELAY ?? '').trim()),
   turnUrls: (env.TURN_URLS ?? '').split(',').map((s) => s.trim()).filter(Boolean),
   turnUsername: env.TURN_USERNAME || undefined,
   turnCredential: env.TURN_CREDENTIAL || undefined,

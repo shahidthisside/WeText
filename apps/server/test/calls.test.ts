@@ -529,6 +529,23 @@ describe('call lines in the chat', () => {
 });
 
 describe('connection servers (ICE)', () => {
+  it('uses the Jami relay unless JAMI_RELAY says off', async () => {
+    const { JAMI_RELAY } = await import('../src/routes/calls.js');
+    expect(config.jamiRelay).toBe(process.env.JAMI_RELAY ? !/^(off|false|0|no)$/i.test(process.env.JAMI_RELAY) : true);
+    config.jamiRelay = true;
+    const on = (await api(app, alice).get('/api/calls/ice')).json();
+    expect(on.relay).toBe(true);
+    const jami = on.iceServers.find((s: any) => s.username === 'ring');
+    expect(jami).toEqual(JAMI_RELAY);
+    expect(jami.urls).toEqual(['turn:turn.jami.net:3478?transport=udp', 'turn:turn.jami.net:3478?transport=tcp']);
+    // STUN comes first, so direct routes are always found too.
+    expect(JSON.stringify(on.iceServers[0])).toContain('stun:');
+    config.jamiRelay = false;
+    const off = (await api(app, alice).get('/api/calls/ice')).json();
+    expect(off.relay).toBe(false);
+    expect(JSON.stringify(off.iceServers)).not.toContain('jami');
+  });
+
   it('needs a signed-in user and always includes free STUN', async () => {
     expect((await api(app).get('/api/calls/ice')).statusCode).toBe(401);
     const res = await api(app, alice).get('/api/calls/ice');
@@ -544,6 +561,22 @@ describe('connection servers (ICE)', () => {
     expect(body.relay).toBe(true);
     expect(body.iceServers.some((s: any) => s.username === 'u' && s.credential === 'p')).toBe(true);
     Object.assign(config, { turnUrls: [], turnUsername: undefined, turnCredential: undefined });
+  });
+
+  it('offers your own relay first and Jami after it, without listing the same relay twice', async () => {
+    config.jamiRelay = true;
+    Object.assign(config, {
+      turnUrls: ['turn:relay.example.test:3478', 'turn:turn.jami.net:3478?transport=udp'],
+      turnUsername: 'ring',
+      turnCredential: 'ring',
+    });
+    const body = (await api(app, alice).get('/api/calls/ice')).json();
+    const relays = body.iceServers.filter((s: any) => s.username);
+    expect(relays.map((s: any) => s.urls)).toEqual([
+      ['turn:relay.example.test:3478', 'turn:turn.jami.net:3478?transport=udp'],
+      ['turn:turn.jami.net:3478?transport=tcp'],
+    ]);
+    Object.assign(config, { turnUrls: [], turnUsername: undefined, turnCredential: undefined, jamiRelay: false });
   });
 
   it('fetches a relay list from a credentials service, reuses it, and survives it failing', async () => {

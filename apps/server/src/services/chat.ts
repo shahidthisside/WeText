@@ -30,6 +30,9 @@ export interface MessageRow {
   audio_ms: number | null;
   expires_at: number | null;
   kind?: string;
+  call_kind?: string | null;
+  call_status?: string | null;
+  call_ms?: number | null;
 }
 
 export interface MemberRow {
@@ -166,8 +169,10 @@ export interface MessageView {
   expiresAt: number | null;
   starred: boolean;
   reactions: { emoji: string; userIds: string[] }[];
-  /** 'user' for normal messages, 'system' for group event lines ("Ana added Ben"). On ALL views. */
-  kind: 'user' | 'system';
+  /** 'user' for normal messages, 'system' for group event lines ("Ana added Ben"), 'call' for call log lines. On ALL views. */
+  kind: 'user' | 'system' | 'call';
+  /** Set when kind is 'call'. The caller is `senderId`. durationMs is the talk time (0 unless completed). */
+  call: { kind: 'audio' | 'video'; status: CallStatus; durationMs: number } | null;
   /** Only populated for messages in group conversations, so group UIs can show the author. */
   sender: { id: string; username: string; displayName: string; avatarUrl: string | null } | null;
 }
@@ -263,11 +268,23 @@ export async function messageViews(ctx: Ctx, viewerId: string, rows: MessageRow[
       expiresAt: m.expires_at,
       starred: stars.has(m.id),
       reactions: deleted ? [] : [...rx.entries()].map(([emoji, userIds]) => ({ emoji, userIds })),
-      kind: m.kind === 'system' ? 'system' : 'user',
+      kind: m.kind === 'system' ? 'system' : m.kind === 'call' ? 'call' : 'user',
+      call:
+        m.kind === 'call' && !deleted
+          ? { kind: m.call_kind === 'video' ? 'video' : 'audio', status: callStatusOf(m.call_status), durationMs: m.call_ms ?? 0 }
+          : null,
       sender: su ? { id: su.id, username: su.username, displayName: su.display_name, avatarUrl: su.avatar_url } : null,
     };
   });
 }
+
+export type CallStatus = 'completed' | 'missed' | 'declined' | 'cancelled' | 'busy' | 'failed';
+const CALL_STATUSES: readonly string[] = ['completed', 'missed', 'declined', 'cancelled', 'busy', 'failed'];
+export function callStatusOf(s: string | null | undefined): CallStatus {
+  return CALL_STATUSES.includes(s ?? '') ? (s as CallStatus) : 'failed';
+}
+/** SQL: a call line only counts as unread for the person who was called, and only when they missed it. */
+export const COUNTS_AS_UNREAD_SQL = `(m.kind != 'call' OR m.call_status IN ('missed', 'cancelled', 'busy'))`;
 
 /** Short preview flags for a conversation's last message. */
 export function lastMessagePreview(view: MessageView) {

@@ -439,6 +439,14 @@ const migrations: string[] = [
   -- 'system' messages are lines like "Ana added Ben" shown in the thread; they have no sender attachments.
   ALTER TABLE messages ADD COLUMN kind TEXT NOT NULL DEFAULT 'user';
   `,
+  /* sql */ `
+  -- Calls. A finished or missed call is a message with kind = 'call' whose sender is the caller.
+  -- call_kind: audio | video. call_status: completed | missed | declined | cancelled | busy | failed.
+  -- call_ms is the talk time of a completed call. Live call state itself is never stored.
+  ALTER TABLE messages ADD COLUMN call_kind TEXT;
+  ALTER TABLE messages ADD COLUMN call_status TEXT;
+  ALTER TABLE messages ADD COLUMN call_ms INTEGER;
+  `,
 ];
 
 /** Fading posts and expired disappearing messages are hard-deleted once they expire. */

@@ -11,6 +11,7 @@ import {
   MAX_GROUP_MEMBERS,
   MAX_PINNED,
   MESSAGE_REACTIONS,
+  COUNTS_AS_UNREAD_SQL,
   TTL_OPTIONS,
   activeMemberIds,
   codePointLength,
@@ -46,6 +47,7 @@ export async function unreadMessageCounts(ctx: Ctx, userId: string) {
       `SELECT c.id, o.user_id AS other_id, me.marked_unread, me.archived_at,
          EXISTS (SELECT 1 FROM messages m WHERE m.conversation_id = c.id AND m.sender_id != ?1
                   AND m.created_at > me.last_read_at AND m.created_at > me.cleared_at AND m.deleted_at IS NULL
+                  AND ${COUNTS_AS_UNREAD_SQL}
                   AND (m.expires_at IS NULL OR m.expires_at > ?2)
                   AND NOT EXISTS (SELECT 1 FROM message_hidden h WHERE h.message_id = m.id AND h.user_id = ?1)) AS unread,
          EXISTS (SELECT 1 FROM messages m WHERE m.conversation_id = c.id AND m.created_at > me.cleared_at
@@ -82,7 +84,7 @@ export async function unreadMessageCounts(ctx: Ctx, userId: string) {
     .prepare(
       `SELECT c.id, me.marked_unread,
          EXISTS (SELECT 1 FROM messages m WHERE m.conversation_id = c.id AND m.sender_id != ?1
-                  AND m.kind != 'system'
+                  AND m.kind != 'system' AND ${COUNTS_AS_UNREAD_SQL}
                   AND m.created_at > me.last_read_at
                   AND m.created_at > MAX(me.cleared_at, me.joined_at) AND m.deleted_at IS NULL
                   AND (m.expires_at IS NULL OR m.expires_at > ?2)
@@ -169,7 +171,7 @@ const routes: FastifyPluginAsync = async (app) => {
     const unread = (
       (await db
         .prepare(
-          `SELECT COUNT(*) AS n FROM messages m WHERE m.conversation_id = ? AND m.sender_id != ? AND m.kind != 'system'
+          `SELECT COUNT(*) AS n FROM messages m WHERE m.conversation_id = ? AND m.sender_id != ? AND m.kind != 'system' AND ${COUNTS_AS_UNREAD_SQL}
              AND m.created_at > ? AND m.created_at > ? AND m.deleted_at IS NULL AND (m.expires_at IS NULL OR m.expires_at > ?)
              AND NOT EXISTS (SELECT 1 FROM message_hidden h WHERE h.message_id = m.id AND h.user_id = ?)`,
         )
@@ -215,7 +217,7 @@ const routes: FastifyPluginAsync = async (app) => {
     const unread = (
       (await db
         .prepare(
-          `SELECT COUNT(*) AS n FROM messages m WHERE m.conversation_id = ? AND m.sender_id != ? AND m.created_at > ? AND m.created_at > ?
+          `SELECT COUNT(*) AS n FROM messages m WHERE m.conversation_id = ? AND m.sender_id != ? AND ${COUNTS_AS_UNREAD_SQL} AND m.created_at > ? AND m.created_at > ?
              AND m.deleted_at IS NULL AND (m.expires_at IS NULL OR m.expires_at > ?)
              AND NOT EXISTS (SELECT 1 FROM message_hidden h WHERE h.message_id = m.id AND h.user_id = ?)`,
         )
@@ -743,7 +745,7 @@ const routes: FastifyPluginAsync = async (app) => {
         if (await isBlockedEither(db, user.id, otherUser.id)) throw forbidden("You can't message this account");
       }
 
-      if (body.replyToId && !(await db.prepare('SELECT 1 FROM messages WHERE id = ? AND conversation_id = ?').get(body.replyToId, id))) {
+      if (body.replyToId && !(await db.prepare("SELECT 1 FROM messages WHERE id = ? AND conversation_id = ? AND kind = 'user'").get(body.replyToId, id))) {
         throw badRequest('The message you replied to no longer exists');
       }
       if (body.postId) {
@@ -830,7 +832,7 @@ const routes: FastifyPluginAsync = async (app) => {
     const { m, me, other, isGroup } = await loadMessage(id, user.id);
     if (isGroup && me.left_at) throw forbidden('You are no longer in this group');
     if (m.sender_id !== user.id) throw forbidden('You can only edit your own messages');
-    if (m.kind === 'system') throw badRequest('System messages can’t be edited');
+    if (m.kind === 'system' || m.kind === 'call') throw badRequest('This line can’t be edited');
     if (m.deleted_at) throw badRequest('This message was unsent');
     if (m.forwarded) throw badRequest('Forwarded messages can’t be edited');
     if (m.audio_url || m.post_id) throw badRequest('Only text messages can be edited');
@@ -850,7 +852,7 @@ const routes: FastifyPluginAsync = async (app) => {
     const { m, me, other, isGroup } = await loadMessage(id, user.id);
     if (isGroup && me.left_at) throw forbidden('You are no longer in this group');
     if (m.sender_id !== user.id) throw forbidden('You can only unsend your own messages');
-    if (m.kind === 'system') throw badRequest('System messages can’t be unsent');
+    if (m.kind === 'system' || m.kind === 'call') throw badRequest('This line can’t be unsent. Use delete for me instead');
     await db.prepare('UPDATE messages SET deleted_at = ? WHERE id = ?').run(now(), id);
     await db.prepare('DELETE FROM message_reactions WHERE message_id = ?').run(id);
     return { message: await broadcastUpdate(m, user.id, other?.user_id, isGroup) };
@@ -872,6 +874,7 @@ const routes: FastifyPluginAsync = async (app) => {
     const { starred } = z.object({ starred: z.boolean() }).parse(req.body);
     const { m } = await loadMessage(id, user.id);
     if (m.deleted_at) throw badRequest('This message was unsent');
+    if (m.kind === 'system' || m.kind === 'call') throw badRequest('This line can’t be starred');
     if (starred) {
       await db.prepare('INSERT OR IGNORE INTO message_stars (message_id, user_id, created_at) VALUES (?, ?, ?)').run(id, user.id, now());
     } else {
@@ -935,7 +938,7 @@ const routes: FastifyPluginAsync = async (app) => {
     const { conversationIds } = z.object({ conversationIds: z.array(z.string().max(32)).min(1).max(5) }).parse(req.body);
     const { m } = await loadMessage(id, user.id);
     if (m.deleted_at) throw badRequest('This message was unsent');
-    if (!m.body && !m.image_url && !m.audio_url && !m.post_id) throw badRequest('Nothing to forward');
+    if (m.kind === 'system' || m.kind === 'call' || (!m.body && !m.image_url && !m.audio_url && !m.post_id)) throw badRequest('Nothing to forward');
 
     let sent = 0;
     const failed: { conversationId: string; reason: string }[] = [];
@@ -1006,7 +1009,7 @@ const routes: FastifyPluginAsync = async (app) => {
     const { emoji } = z.object({ emoji: z.enum(MESSAGE_REACTIONS).nullable() }).parse(req.body);
     const { m, me, other, isGroup } = await loadMessage(id, user.id);
     if (m.deleted_at) throw badRequest('Message was unsent');
-    if (m.kind === 'system') throw badRequest('System messages can’t be reacted to');
+    if (m.kind === 'system' || m.kind === 'call') throw badRequest('This line can’t be reacted to');
     if (isGroup) {
       if (me.left_at) throw forbidden('You are no longer in this group');
     } else if (other && (await isBlockedEither(db, user.id, other.user_id))) {

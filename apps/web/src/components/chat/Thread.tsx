@@ -1,10 +1,11 @@
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
-import { ArrowDown, ArrowLeft, Hourglass, Info, Search } from 'lucide-react';
+import { ArrowDown, ArrowLeft, Hourglass, Info, Phone, Search, Video } from 'lucide-react';
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { toast } from 'sonner';
 import { api, errorMessage } from '../../lib/api';
 import { useAuthedMe } from '../../lib/auth';
+import { callsSupported, startCall, useCall } from '../../lib/call';
 import { usePresence, useTyping } from '../../lib/realtime';
 import { queryClient } from '../../lib/query';
 import { appendMessage, removeMessage, replaceMessage, ttlLabel, convTitle, firstName, memberColor, didSelfLeave, type MsgPages } from '../../lib/chat';
@@ -13,6 +14,7 @@ import { cn, dayLabel, lastSeen } from '../../lib/utils';
 import { Lightbox } from '../Media';
 import { Avatar, ConfirmDialog, EmptyState, IconButton, PageSpinner, Spinner, VerifiedLock } from '../ui';
 import { Bubble } from './Bubble';
+import { CallLine } from './CallLine';
 import { Composer, type OutgoingMessage } from './Composer';
 import { ConversationInfo } from './ConversationInfo';
 import { GroupInfo } from './GroupInfo';
@@ -187,6 +189,7 @@ export function Thread({ id, onBack }: { id: string; onBack: () => void }) {
   // Sheets / dialogs.
   const [replyTo, setReplyTo] = useState<Message | null>(null);
   const [photo, setPhoto] = useState<string | null>(null);
+  const call = useCall();
   const [info, setInfo] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [actionTarget, setActionTarget] = useState<ActionTarget | null>(null);
@@ -373,6 +376,17 @@ export function Thread({ id, onBack }: { id: string; onBack: () => void }) {
     leftReason = didSelfLeave(c.id) ? 'left' : 'removed';
   }
 
+  // Calls: one-to-one chats only, and only while I can write in them and am not already on a call.
+  const inCall = call.phase !== 'idle' && call.phase !== 'ended';
+  const callAllowed = !isGroup && c.canSend && !inCall;
+  const callHint = !c.canSend ? 'You can’t call this person' : inCall ? 'You’re already in a call' : undefined;
+  const callee = c.other;
+  const convId = c.id;
+  function placeCall(kind: 'audio' | 'video') {
+    if (isGroup || !callee) return;
+    void startCall({ conversationId: convId, peer: { id: callee.id, username: callee.username, displayName: callee.displayName, avatarUrl: callee.avatarUrl } }, kind);
+  }
+
   // For a quoted reply in a group, resolve the original sender's name.
   function replyNameFor(m: Message): string | undefined {
     if (!isGroup || !m.replyTo?.senderId) return undefined;
@@ -411,7 +425,18 @@ export function Thread({ id, onBack }: { id: string; onBack: () => void }) {
             <Hourglass className="size-3.5" /> {ttlLabel(c.ttlSeconds)}
           </span>
         )}
-        <IconButton label="Search in chat" onClick={() => setSearchOpen(true)}>
+        {!isGroup && callsSupported() && (
+          <>
+            <IconButton label="Voice call" disabled={!callAllowed} title={callHint} onClick={() => placeCall('audio')}>
+              <Phone className="size-5" />
+            </IconButton>
+            <IconButton label="Video call" disabled={!callAllowed} title={callHint} onClick={() => placeCall('video')}>
+              <Video className="size-5" />
+            </IconButton>
+          </>
+        )}
+        {/* On the narrowest phones the search button moves into the info sheet to make room for the call buttons. */}
+        <IconButton label="Search in chat" className="max-[399px]:hidden" onClick={() => setSearchOpen(true)}>
           <Search className="size-5" />
         </IconButton>
         <IconButton label="Conversation info" onClick={() => setInfo(true)}>
@@ -455,6 +480,20 @@ export function Thread({ id, onBack }: { id: string; onBack: () => void }) {
             const next = messages[i + 1];
             const newDay = !prev || new Date(prev.createdAt).toDateString() !== new Date(m.createdAt).toDateString();
 
+            // Calls render as a centered card with a call-back button.
+            if (m.kind === 'call') {
+              return (
+                <Fragment key={m.clientKey ?? m.id}>
+                  {newDay && (
+                    <div className="sticky top-1 z-[1] my-4 flex justify-center">
+                      <span className="rounded-full bg-bg-muted px-3 py-1 text-[0.75rem] font-semibold text-fg-muted shadow-sm">{dayLabel(m.createdAt)}</span>
+                    </div>
+                  )}
+                  <CallLine m={m} meId={me.id} onCallBack={c.canSend && !isGroup ? placeCall : undefined} registerRef={registerRef} />
+                </Fragment>
+              );
+            }
+
             // System event lines render as centered muted pills ("Ana added Ben").
             if (m.kind === 'system') {
               const actor = m.senderId === me.id ? 'You' : m.sender?.displayName ?? 'Someone';
@@ -474,8 +513,8 @@ export function Thread({ id, onBack }: { id: string; onBack: () => void }) {
               );
             }
 
-            const prevUser = prev && prev.kind !== 'system';
-            const nextUser = next && next.kind !== 'system';
+            const prevUser = prev && prev.kind !== 'system' && prev.kind !== 'call';
+            const nextUser = next && next.kind !== 'system' && next.kind !== 'call';
             const groupedWithPrev = !!prevUser && !newDay && prev!.senderId === m.senderId && m.createdAt - prev!.createdAt < 5 * 60_000;
             const groupedWithNext = !!nextUser && next!.senderId === m.senderId && next!.createdAt - m.createdAt < 5 * 60_000 && new Date(next!.createdAt).toDateString() === new Date(m.createdAt).toDateString();
             const mine = m.senderId === me.id;
@@ -567,7 +606,7 @@ export function Thread({ id, onBack }: { id: string; onBack: () => void }) {
       )}
 
       <Lightbox media={photo ? [{ url: photo }] : []} index={photo ? 0 : null} onClose={() => setPhoto(null)} onIndex={() => {}} />
-      {info && (isGroup ? <GroupInfo c={c} onClose={() => setInfo(false)} /> : <ConversationInfo c={c} onClose={() => setInfo(false)} />)}
+      {info && (isGroup ? <GroupInfo c={c} onClose={() => setInfo(false)} /> : <ConversationInfo c={c} onClose={() => setInfo(false)} onSearch={() => { setInfo(false); setSearchOpen(true); }} />)}
       <SearchSheet conversationId={id} open={searchOpen} onClose={() => setSearchOpen(false)} onJump={jump} />
       <MessageActionSheet
         target={actionTarget}

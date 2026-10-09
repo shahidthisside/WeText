@@ -7,9 +7,11 @@ import { setMe, useAuthedMe, useCounts } from '../lib/auth';
 import { closeComposer, openComposer, useComposerState } from '../lib/composer';
 import { openHelp, openPalette } from '../lib/palette';
 import { queryClient } from '../lib/query';
+import { useCallSignalling } from '../lib/call';
 import { useRealtime } from '../lib/realtime';
 import { disconnectSocket } from '../lib/socket';
 import { cn } from '../lib/utils';
+import { CallLayer } from './call/CallLayer';
 import { CommandPalette } from './CommandPalette';
 import { HelpSheet } from './HelpSheet';
 import { Composer } from './Composer';
@@ -198,6 +200,8 @@ export function AppLayout() {
   const counts = useCounts();
   const location = useLocation();
   useRealtime();
+  const me = useAuthedMe();
+  useCallSignalling(me.id);
   const c = counts.data;
   const items: DockItem[] = [
     { to: '/home', label: 'Home', icon: Home },
@@ -227,6 +231,7 @@ export function AppLayout() {
       <ShareToChat />
       <CommandPalette />
       <HelpSheet />
+      <CallLayer />
     </div>
   );
 }

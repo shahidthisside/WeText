@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { Ban, Bell, BellOff, Hourglass, Trash2 } from 'lucide-react';
+import { Ban, Bell, BellOff, Hourglass, Search, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
@@ -12,7 +12,7 @@ import { Sheet, SheetAction } from './sheet';
 import { AudioBubble } from './AudioBubble';
 import { Lightbox } from '../Media';
 
-export function ConversationInfo({ c, onClose }: { c: Conversation; onClose: () => void }) {
+export function ConversationInfo({ c, onClose, onSearch }: { c: Conversation; onClose: () => void; onSearch?: () => void }) {
   const navigate = useNavigate();
   // ConversationInfo only renders for 1:1 chats (groups use GroupInfo), so `other` is present.
   const other = c.other!;
@@ -97,6 +97,11 @@ export function ConversationInfo({ c, onClose }: { c: Conversation; onClose: () 
             </div>
           </div>
           <div className="h-px bg-line" />
+          {onSearch && (
+            <SheetAction icon={<Search />} onClick={onSearch}>
+              Search in chat
+            </SheetAction>
+          )}
           <SheetAction icon={c.muted ? <Bell /> : <BellOff />} onClick={() => patch({ muted: !c.muted }, c.muted ? 'Conversation unmuted' : 'Conversation muted')}>
             {c.muted ? 'Unmute conversation' : 'Mute conversation'}
           </SheetAction>

@@ -150,7 +150,7 @@ export class CallManager {
 
     socket.on('call:invite', guard(z.object({ conversationId: id, kind: z.enum(['audio', 'video']) }), async (d, ack) => ack(await this.invite(userId, device!, d.conversationId, d.kind))));
     socket.on('call:accept', guard(z.object({ callId: id }), (d, ack) => ack(this.accept(userId, device!, d.callId))));
-    socket.on('call:end', guard(z.object({ callId: id, reason: z.enum(['hangup', 'decline', 'cancel', 'failed']).optional() }), async (d, ack) => ack(await this.end(userId, device!, d.callId, d.reason ?? 'hangup'))));
+    socket.on('call:end', guard(z.object({ callId: id, reason: z.enum(['hangup', 'decline', 'cancel', 'failed']).optional(), diag: z.string().max(600).optional() }), async (d, ack) => ack(await this.end(userId, device!, d.callId, d.reason ?? 'hangup', d.diag))));
     socket.on('call:signal', guard(z.object({ callId: id, data: signalSchema }), (d, ack) => ack(this.signal(userId, device!, d.callId, d.data))));
     socket.on('call:connected', guard(z.object({ callId: id }), (d, ack) => ack(this.connected(userId, device!, d.callId))));
     socket.on('call:peer', guard(z.object({ callId: id, state: peerStateSchema }), (d, ack) => ack(this.peer(userId, device!, d.callId, d.state))));
@@ -259,7 +259,7 @@ export class CallManager {
     return { ok: true, call: this.view(call, 'callee') };
   }
 
-  async end(userId: string, device: string, callId: string, reason: 'hangup' | 'decline' | 'cancel' | 'failed') {
+  async end(userId: string, device: string, callId: string, reason: 'hangup' | 'decline' | 'cancel' | 'failed', diag?: string) {
     const call = this.calls.get(callId);
     if (!call || call.ended) return { ok: true, already: true };
     const isCaller = call.callerId === userId;
@@ -268,6 +268,8 @@ export class CallManager {
     if (call.state === 'active' && ((isCaller && call.callerDevice !== device) || (isCallee && call.calleeDevice !== device))) {
       return { ok: false, code: 'forbidden', message: 'This call is on another device' };
     }
+    // Why a call could not connect, for the site owner's logs. The summary holds no addresses, names or message text.
+    if (reason === 'failed' && diag && !this.ctx.rt.quiet) console.warn(`[call] failed to connect id=${callId} kind=${call.kind} role=${isCaller ? 'caller' : 'callee'} ${diag}`);
     let status: CallStatus;
     if (call.state === 'ringing') status = isCallee ? 'declined' : 'cancelled';
     else if (call.connectedAt) status = 'completed';

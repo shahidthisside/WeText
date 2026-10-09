@@ -48,10 +48,15 @@ export interface LinkOptions {
 }
 
 /** First connection must happen within this long after answering. */
-const CONNECT_MS = 30_000;
+const CONNECT_MS = 25_000;
 /** A connection that was working gets this long to recover before the call is given up. */
 const GIVE_UP_MS = 40_000;
 const STATS_EVERY_MS = 2_000;
+/**
+ * While a call goes through a relay, look for a direct route this often. The relay keeps carrying the call while the
+ * search runs, and a direct route always wins when one is found, so the switch is seamless.
+ */
+const UPGRADE_EVERY_MS = 60_000;
 
 type Stat = Record<string, unknown> & { type: string };
 
@@ -82,6 +87,16 @@ export class PeerLink {
   private attempts = 0;
   private closed = false;
 
+  /** What kinds of addresses each side offered, for working out why a call did not connect. */
+  private localKinds: Record<string, number> = {};
+  private remoteKinds: Record<string, number> = {};
+  private relayConfigured: boolean;
+  /** How the call travels right now: straight between the phones, through a relay, or not known yet. */
+  route: 'direct' | 'relay' | null = null;
+  private relaySince = 0;
+  /** How many times a direct route was looked for while on a relay (for tests and diagnosis). */
+  upgradeChecks = 0;
+
   private tracker = new StatsTracker();
   private adapter: Adapter;
   private appliedKey = '';
@@ -90,6 +105,7 @@ export class PeerLink {
   constructor(o: LinkOptions) {
     this.polite = o.polite;
     this.ev = o.events;
+    this.relayConfigured = o.iceServers.some((s) => (Array.isArray(s.urls) ? s.urls : [s.urls]).some((u) => /^turns?:/.test(u)));
     this.audioTrack = o.audioTrack;
     this.cameraTrack = o.cameraTrack;
     // The callee answers whenever the offer arrives; the caller waits until it is told the call was answered.
@@ -111,6 +127,7 @@ export class PeerLink {
       if (!this.remoteStream.getTracks().includes(e.track)) this.remoteStream.addTrack(e.track);
     };
     this.pc.onicecandidate = (e) => {
+      if (e.candidate) this.count(this.localKinds, e.candidate.candidate);
       this.send({ type: 'candidate', candidate: e.candidate ? (e.candidate.toJSON() as never) : null });
     };
     this.pc.onnegotiationneeded = () => {
@@ -161,6 +178,7 @@ export class PeerLink {
         }
       } else {
         if (!s.candidate) return; // "no more candidates"
+        this.count(this.remoteKinds, s.candidate.candidate);
         if (!this.pc.remoteDescription) {
           this.pendingCandidates.push(s.candidate);
           return;
@@ -205,6 +223,25 @@ export class PeerLink {
     } catch {
       /* already closed */
     }
+  }
+
+  private count(into: Record<string, number>, candidate: string) {
+    const kind = candidate.split(' ')[7] ?? 'other';
+    into[kind] = (into[kind] ?? 0) + 1;
+  }
+
+  /** A one-line summary of why a connection might not have formed. Contains no addresses or names. */
+  diagnose(): string {
+    const fmt = (k: Record<string, number>) => Object.entries(k).map(([a, b]) => `${a}:${b}`).join(',') || 'none';
+    return [
+      `conn=${this.pc.connectionState}`,
+      `ice=${this.pc.iceConnectionState}`,
+      `local=${fmt(this.localKinds)}`,
+      `remote=${fmt(this.remoteKinds)}`,
+      `relayConfigured=${this.relayConfigured}`,
+      `route=${this.route ?? 'none'}`,
+      `role=${this.polite ? 'callee' : 'caller'}`,
+    ].join(' ');
   }
 
   /** What the picture settings are right now, for display and tests. */
@@ -356,8 +393,10 @@ export class PeerLink {
     this.measuring = true;
     try {
       const report = await this.pc.getStats();
-      const sample = this.tracker.ingest([...report.values()] as Stat[], Date.now());
+      const stats = [...report.values()] as Stat[];
+      const sample = this.tracker.ingest(stats, Date.now());
       this.lastSample = sample;
+      this.watchRoute(stats, Date.now());
       const d = this.adapter.update(sample, Date.now());
       this.ev.quality(d.quality, sample);
       await this.applyPlan(d.plan);
@@ -367,6 +406,34 @@ export class PeerLink {
     } finally {
       this.measuring = false;
     }
+  }
+
+  /**
+   * Work out whether the call is on a relay. If it has been for a while, the caller quietly searches for a direct
+   * route (an ICE restart). The current route keeps working during the search, and if a direct one now exists (for
+   * example someone left the Wi-Fi for mobile data) the call moves to it; otherwise it simply stays on the relay.
+   */
+  private watchRoute(stats: Stat[], now: number) {
+    const byId = new Map(stats.map((s) => [s.id as string, s]));
+    let pair: Stat | undefined;
+    for (const s of stats) {
+      if (s.type === 'transport' && typeof s.selectedCandidatePairId === 'string') pair = byId.get(s.selectedCandidatePairId);
+    }
+    pair ??= stats.find((s) => s.type === 'candidate-pair' && s.nominated === true && s.state === 'succeeded');
+    if (!pair) return;
+    const kind = (id: unknown) => byId.get(id as string)?.candidateType;
+    const relayed = kind(pair.localCandidateId) === 'relay' || kind(pair.remoteCandidateId) === 'relay';
+    const route = relayed ? 'relay' : 'direct';
+    if (route !== this.route) {
+      this.route = route;
+      this.relaySince = now;
+    }
+    // Only one side searches, so the two never restart at the same moment; only while the call is healthy.
+    if (!relayed || this.polite || this.computeState() !== 'connected') return;
+    if (now - this.relaySince < UPGRADE_EVERY_MS) return;
+    this.relaySince = now;
+    this.upgradeChecks++;
+    this.restartIce();
   }
 
   private async applyPlan(plan: Plan) {

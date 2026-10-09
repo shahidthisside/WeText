@@ -46,7 +46,11 @@ function useTick(on: boolean) {
 function statusLine(c: CallState, now: number): { text: string; tone: 'normal' | 'warn' } {
   const name = c.peer?.displayName ?? 'They';
   if (c.phase === 'calling') return { text: 'Calling…', tone: 'normal' };
-  if (c.phase === 'connecting') return { text: 'Connecting…', tone: 'normal' };
+  if (c.phase === 'connecting') {
+    // After a few seconds say so, instead of leaving the person watching a silent screen.
+    const waited = c.connectingAt ? now - c.connectingAt : 0;
+    return waited > 8000 ? { text: 'Still connecting… your network is making this slow', tone: 'warn' } : { text: 'Connecting…', tone: 'normal' };
+  }
   if (c.reconnecting) return { text: 'Reconnecting…', tone: 'warn' };
   if (c.remote.reconnecting) return { text: `${name} is reconnecting…`, tone: 'warn' };
   return { text: c.connectedAt ? formatDuration(now - c.connectedAt) : 'Connected', tone: 'normal' };
@@ -228,7 +232,7 @@ function Incoming({ c }: { c: CallState }) {
 /* ------------------------------------------------------------------ the call itself */
 
 function InCall({ c, soundBlocked, enableSound }: { c: CallState; soundBlocked: boolean; enableSound: () => void }) {
-  useTick(c.phase === 'active');
+  useTick(c.phase === 'active' || c.phase === 'connecting');
   const name = c.peer?.displayName ?? 'Call';
   const status = statusLine(c, Date.now());
   const showRemoteVideo = c.remote.video && !c.remote.saver && c.phase === 'active';

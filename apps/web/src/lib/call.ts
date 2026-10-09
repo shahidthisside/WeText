@@ -56,6 +56,8 @@ export interface CallState {
   remote: RemoteState;
   /** Local clock time the call connected. */
   connectedAt: number | null;
+  /** Local clock time we started connecting after the call was answered. */
+  connectingAt: number | null;
   minimized: boolean;
   /** A short message about something that just happened ("Video paused to keep the call clear"). */
   notice: string | null;
@@ -83,6 +85,7 @@ const IDLE: CallState = {
   reconnecting: false,
   remote: REMOTE0,
   connectedAt: null,
+  connectingAt: null,
   minimized: false,
   notice: null,
   endText: null,
@@ -325,6 +328,8 @@ function endTextFor(role: 'caller' | 'callee' | null, reason: string, status: st
   if (status === 'missed') return role === 'caller' ? `${name} didn’t answer` : 'Missed call';
   if (status === 'cancelled') return role === 'caller' ? 'Call cancelled' : 'Missed call';
   if (reason === 'blocked') return 'Call ended';
+  // The server only records "failed" for a call that never connected.
+  if (status === 'failed') return 'Couldn’t connect. This network may be blocking calls.';
   return 'The connection was lost';
 }
 
@@ -364,8 +369,10 @@ function makeLink(polite: boolean) {
 function onLinkState(s: LinkState) {
   if (s === 'failed') {
     const id = state.callId;
-    if (id) getSocket().emit('call:end', { callId: id, reason: 'failed' }, () => {});
-    endLocal('The connection was lost');
+    const never = !state.connectedAt;
+    const diag = rt.link?.diagnose().slice(0, 500);
+    if (id) getSocket().emit('call:end', { callId: id, reason: 'failed', diag }, () => {});
+    endLocal(never ? 'Couldn’t connect. This network may be blocking calls.' : 'The connection was lost');
   } else if (s === 'reconnecting') {
     if (state.phase === 'active' && !state.reconnecting) {
       set({ reconnecting: true });
@@ -451,7 +458,7 @@ export async function startCall(target: CallTarget, kind: CallKind) {
     if (ack.glare || ack.call?.role === 'callee') {
       // They were calling us at the very same moment: we are now simply answering their call.
       stopRinging();
-      set({ role: 'callee', phase: 'connecting' });
+      set({ role: 'callee', phase: 'connecting', connectingAt: Date.now() });
       makeLink(true);
     } else {
       makeLink(false); // warm up while it rings
@@ -499,7 +506,7 @@ export async function acceptCall(voiceOnly = false) {
   const wantVideo = state.kind === 'video' && !voiceOnly;
   const token = ++rt.token;
   stopRinging();
-  set({ phase: 'connecting', cameraOn: wantVideo, saver: voiceOnly && state.kind === 'video' });
+  set({ phase: 'connecting', connectingAt: Date.now(), cameraOn: wantVideo, saver: voiceOnly && state.kind === 'video' });
   try {
     const [media] = await Promise.all([acquire(wantVideo), warmIce()]);
     if (token !== rt.token) {
@@ -654,7 +661,7 @@ function onSignal(p: { callId: string; data: Signal }) {
 function onAccepted(p: { callId: string }) {
   if (p.callId !== state.callId || state.role !== 'caller') return;
   stopRinging();
-  set({ phase: 'connecting' });
+  set({ phase: 'connecting', connectingAt: Date.now() });
   // The link may still be preparing (microphone prompt); start as soon as it exists.
   const go = () => {
     if (rt.link) rt.link.start();

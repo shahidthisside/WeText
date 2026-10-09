@@ -26,6 +26,8 @@ export class Realtime {
   private sockets = new Map<string, number>();
   /** Set once the app is built (calls need the full context). */
   calls: CallManager | null = null;
+  /** Keeps diagnostic log lines out of test output. */
+  quiet = !!process.env.VITEST;
 
   constructor(private db: DB) {}
 

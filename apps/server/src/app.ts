@@ -12,6 +12,7 @@ import { openDb, purgeExpired } from './db.js';
 import { HttpError, unauthorized } from './lib/errors.js';
 import { hashToken } from './lib/crypto.js';
 import { Realtime } from './realtime.js';
+import { CallManager } from './services/calls.js';
 import type { Ctx, UserRow } from './types.js';
 import authRoutes from './routes/auth.js';
 import meRoutes from './routes/me.js';
@@ -22,6 +23,7 @@ import discoverRoutes from './routes/discover.js';
 import notificationRoutes from './routes/notifications.js';
 import reportRoutes from './routes/reports.js';
 import messageRoutes from './routes/messages.js';
+import callRoutes from './routes/calls.js';
 import uploadRoutes, { serveUpload } from './routes/uploads.js';
 
 export interface AppOptions {
@@ -47,6 +49,7 @@ export async function buildApp(opts: AppOptions = {}) {
   const rt = new Realtime(db);
   rt.attach(app.server);
   const ctx: Ctx = { db, rt };
+  rt.calls = new CallManager(ctx);
   app.decorate('ctx', ctx);
 
   await purgeExpired(db);
@@ -151,6 +154,7 @@ export async function buildApp(opts: AppOptions = {}) {
   await app.register(notificationRoutes, { prefix: '/api/notifications' });
   await app.register(reportRoutes, { prefix: '/api' });
   await app.register(messageRoutes, { prefix: '/api' });
+  await app.register(callRoutes, { prefix: '/api/calls' });
   await app.register(uploadRoutes, { prefix: '/api/uploads' });
 
   // User uploads live in the database. File names are random and never change, so they cache forever.

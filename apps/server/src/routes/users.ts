@@ -195,6 +195,8 @@ const routes: FastifyPluginAsync = async (app) => {
       await db.prepare('DELETE FROM follows WHERE (follower_id = ? AND followee_id = ?) OR (follower_id = ? AND followee_id = ?)').run(me.id, u.id, u.id, me.id);
       await db.prepare('DELETE FROM notifications WHERE (user_id = ? AND actor_id = ?) OR (user_id = ? AND actor_id = ?)').run(me.id, u.id, u.id, me.id);
     });
+    // A live call between the two stops the moment one blocks the other.
+    await app.ctx.rt.calls?.endBetween(me.id, u.id, 'blocked');
     return { ok: true };
   });
 

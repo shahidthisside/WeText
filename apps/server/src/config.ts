@@ -29,6 +29,15 @@ export const config = {
   mailFromName: env.MAIL_FROM_NAME || 'WeText',
   /** Optional: the one account allowed to read submitted reports via GET /api/admin/reports. */
   adminUsername: env.ADMIN_USERNAME || undefined,
+  /**
+   * Optional relay (TURN) for the roughly one call in seven that cannot connect directly. Either set the three static
+   * values, or TURN_API_URL to a service that returns an `iceServers` array (for example Metered Open Relay:
+   * https://<app>.metered.live/api/v1/turn/credentials?apiKey=...). Without any of them calls still work for most people.
+   */
+  turnUrls: (env.TURN_URLS ?? '').split(',').map((s) => s.trim()).filter(Boolean),
+  turnUsername: env.TURN_USERNAME || undefined,
+  turnCredential: env.TURN_CREDENTIAL || undefined,
+  turnApiUrl: env.TURN_API_URL || undefined,
   passwordResetTtlMs: 30 * 60 * 1000,
   /** Photo storage allowed per account (they live in the shared free database). */
   photoQuotaBytes: Number(env.PHOTO_QUOTA_MB ?? 150) * 1024 * 1024,

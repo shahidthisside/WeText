@@ -5,6 +5,7 @@ import type { DB } from './db.js';
 import { config } from './config.js';
 import { hashToken } from './lib/crypto.js';
 import type { UserRow } from './types.js';
+import type { CallManager } from './services/calls.js';
 
 function parseCookie(header: string | undefined, name: string): string | null {
   if (!header) return null;
@@ -23,6 +24,8 @@ function parseCookie(header: string | undefined, name: string): string | null {
 export class Realtime {
   io: Server | null = null;
   private sockets = new Map<string, number>();
+  /** Set once the app is built (calls need the full context). */
+  calls: CallManager | null = null;
 
   constructor(private db: DB) {}
 
@@ -58,6 +61,11 @@ export class Realtime {
     const userId = socket.data.userId as string;
     socket.join(`user:${userId}`);
     socket.join(`session:${socket.data.sessionId}`);
+    // One browser tab = one device. It keeps the same id across socket reconnects, so a call survives a network blip.
+    const rawDevice = (socket.handshake.auth as { deviceId?: unknown } | undefined)?.deviceId;
+    const device = typeof rawDevice === 'string' && /^[A-Za-z0-9_-]{8,40}$/.test(rawDevice) ? rawDevice : null;
+    if (device) socket.join(`device:${device}`);
+    this.calls?.bind(socket, userId, device);
 
     const prev = this.sockets.get(userId) ?? 0;
     this.sockets.set(userId, prev + 1);
@@ -158,6 +166,15 @@ export class Realtime {
     this.io?.to(`user:${userId}`).emit(event, payload);
   }
 
+  emitToDevice(deviceId: string, event: string, payload: unknown) {
+    this.io?.to(`device:${deviceId}`).emit(event, payload);
+  }
+
+  /** Is at least one live socket attached to this device (tab)? */
+  deviceOnline(deviceId: string) {
+    return (this.io?.sockets.adapter.rooms.get(`device:${deviceId}`)?.size ?? 0) > 0;
+  }
+
   /** Force-disconnect sockets tied to a revoked session. */
   disconnectSession(sessionId: string) {
     this.io?.in(`session:${sessionId}`).disconnectSockets(true);
@@ -168,6 +185,7 @@ export class Realtime {
   }
 
   close() {
+    this.calls?.close();
     this.io?.close();
   }
 }

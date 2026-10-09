@@ -178,8 +178,10 @@ export interface Message {
   /** Whether the requesting viewer has starred this message. */
   starred: boolean;
   reactions: { emoji: string; userIds: string[] }[];
-  /** 'user' for normal messages, 'system' for group event lines ("Ana added Ben"). */
-  kind?: 'user' | 'system';
+  /** 'user' for normal messages, 'system' for group event lines ("Ana added Ben"), 'call' for call log lines. */
+  kind?: 'user' | 'system' | 'call';
+  /** Set when kind is 'call'. The caller is `senderId`. */
+  call?: CallInfo | null;
   /** Populated only for messages in group conversations, so group UIs can show the author. */
   sender?: MessageSender | null;
   /** Client-only: stable React key. An optimistic message keeps the key it was created with after the server confirms it, so the bubble is updated in place instead of being replaced. */
@@ -187,6 +189,14 @@ export interface Message {
   /** Client-only: optimistic message awaiting server ack. */
   pending?: boolean;
   failed?: boolean;
+}
+
+export type CallStatus = 'completed' | 'missed' | 'declined' | 'cancelled' | 'busy' | 'failed';
+export interface CallInfo {
+  kind: 'audio' | 'video';
+  status: CallStatus;
+  /** Talk time; 0 unless the call completed. */
+  durationMs: number;
 }
 
 export type MemberRole = 'admin' | 'member';

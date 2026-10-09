@@ -1,3 +1,4 @@
+import { formatDuration } from './call-quality';
 import { queryClient } from './query';
 import type { Conversation, Message } from './types';
 
@@ -57,6 +58,48 @@ export function appendMessage(conversationId: string, msg: Message) {
   });
 }
 
+export interface CallSummary {
+  /** "Missed voice call", "Outgoing video call"... */
+  text: string;
+  /** Talk time such as "2:31", or empty. */
+  detail: string;
+  /** Show in red: a call the viewer did not get to answer. */
+  missed: boolean;
+  kind: 'audio' | 'video';
+}
+
+/** How a call line reads for the person looking at it. The caller is the sender of the line. */
+export function callSummary(m: Pick<Message, 'senderId' | 'call'>, meId: string): CallSummary | null {
+  const c = m.call;
+  if (!c) return null;
+  const mine = m.senderId === meId;
+  const noun = c.kind === 'video' ? 'video call' : 'voice call';
+  const Noun = c.kind === 'video' ? 'Video call' : 'Voice call';
+  const detail = c.status === 'completed' && c.durationMs > 0 ? formatDuration(c.durationMs) : '';
+  const base = { detail, kind: c.kind };
+  switch (c.status) {
+    case 'completed':
+      return { ...base, text: `${mine ? 'Outgoing' : 'Incoming'} ${noun}`, missed: false };
+    case 'declined':
+      return { ...base, text: mine ? `${Noun} declined` : `You declined a ${noun}`, missed: false };
+    case 'missed':
+      return { ...base, text: mine ? 'No answer' : `Missed ${noun}`, missed: !mine };
+    case 'cancelled':
+      return { ...base, text: mine ? `Cancelled ${noun}` : `Missed ${noun}`, missed: !mine };
+    case 'busy':
+      return { ...base, text: mine ? 'Line busy' : `Missed ${noun}`, missed: !mine };
+    default:
+      return { ...base, text: `${Noun} failed`, missed: false };
+  }
+}
+
+/** Does this message count towards the unread badge? Calls only do when the viewer missed them. */
+export function countsAsUnreadMessage(m: Pick<Message, 'kind' | 'call' | 'senderId'>, meId: string): boolean {
+  if (m.senderId === meId || m.kind === 'system') return false;
+  if (m.kind === 'call') return m.call?.status === 'missed' || m.call?.status === 'cancelled' || m.call?.status === 'busy';
+  return true;
+}
+
 /** A short, list-friendly summary of a conversation's last message. */
 export function previewText(c: Conversation, meId: string): string {
   const lm = c.lastMessage;
@@ -66,6 +109,10 @@ export function previewText(c: Conversation, meId: string): string {
   if (lm.kind === 'system') {
     const name = lm.senderId === meId ? 'You' : lm.sender?.displayName ?? 'Someone';
     return `${name} ${lm.body}`;
+  }
+  if (lm.kind === 'call') {
+    const s = callSummary(lm, meId);
+    return s ? `${s.kind === 'video' ? '📹' : '📞'} ${s.text}${s.detail ? ` · ${s.detail}` : ''}` : 'Call';
   }
   if (lm.deleted) return 'Message unsent';
   // Group previews are prefixed with the sender's first name (or "You").

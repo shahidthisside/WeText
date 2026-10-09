@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
 import { useMe } from './auth';
 import { queryClient } from './query';
+import { callSummary, countsAsUnreadMessage } from './chat';
 import { connectSocket, disconnectSocket, getSocket } from './socket';
 import type { Conversation, Counts, Message } from './types';
 
@@ -134,7 +135,7 @@ export function useRealtime() {
         if (idx === -1) return data;
         const c = data.items[idx]!;
         const fromOther = p.message.senderId !== me.id;
-        const countsAsUnread = fromOther && !viewing && p.message.kind !== 'system';
+        const countsAsUnread = fromOther && !viewing && countsAsUnreadMessage(p.message, me.id);
         const updated: Conversation = {
           ...c,
           lastMessage: p.message,
@@ -151,12 +152,17 @@ export function useRealtime() {
             .getQueriesData<{ items: Conversation[] }>({ queryKey: ['conversations'] })
             .flatMap(([, d]) => d?.items ?? [])
             .find((c) => c.id === p.conversationId);
-          if (!conv?.muted && !window.location.pathname.startsWith('/chats')) {
+          // Of the call lines, only calls I missed are worth a pop-up; one that just finished is not news.
+          const quietCall = p.message.kind === 'call' && !callSummary(p.message, me.id)?.missed;
+          if (!conv?.muted && !quietCall && !window.location.pathname.startsWith('/chats')) {
             const who = conv?.isGroup
               ? conv.title ?? 'New message'
               : p.message.sender?.displayName ?? conv?.other?.displayName ?? 'New message';
+            const callLine = callSummary(p.message, me.id);
             const desc =
-              p.message.kind === 'system'
+              p.message.kind === 'call'
+                ? callLine?.text ?? 'Call'
+                : p.message.kind === 'system'
                 ? `${p.message.sender?.displayName ?? 'Someone'} ${p.message.body}`
                 : (conv?.isGroup && p.message.sender ? `${p.message.sender.displayName}: ` : '') +
                   (p.message.body || (p.message.audio ? 'Voice message' : p.message.sharedPost ? 'Shared a note' : p.message.image ? 'Sent a photo' : ''));

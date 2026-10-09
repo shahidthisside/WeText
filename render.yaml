@@ -26,5 +26,5 @@ services:
         sync: false
       - key: MAIL_FROM           # optional: a sender address verified in Brevo
         sync: false
-      - key: TURN_API_URL        # optional: relay for calls that cannot connect directly
+      - key: TURN_API_URL        # optional: an extra relay of your own (the Jami relay is on by default; JAMI_RELAY=off turns it off)
         sync: false

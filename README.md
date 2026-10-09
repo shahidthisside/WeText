@@ -12,7 +12,7 @@
 ![React](https://img.shields.io/badge/react-19-149eca)
 ![Fastify](https://img.shields.io/badge/fastify-5-000000)
 ![libSQL](https://img.shields.io/badge/sqlite%2FTurso-FTS5-003b57)
-![Tests](https://img.shields.io/badge/tests-224%20passing-2ea44f)
+![Tests](https://img.shields.io/badge/tests-226%20passing-2ea44f)
 [![License: Proprietary](https://img.shields.io/badge/license-proprietary-red)](LICENSE)
 
 [Live site](https://wetextapp.onrender.com) · [Features](#features) · [Quick start](#quick-start) · [Architecture](#architecture) · [API](#api-overview) · [Security](#security) · [Deployment](#deployment)
@@ -83,7 +83,7 @@ One-to-one **voice and video calls** from the header of any chat, built to hold 
 | Who can call | One-to-one chats only. Not if either of you has blocked the other, and not unless the person called follows you or has already replied in the chat, so a stranger cannot ring you. Blocking someone ends a live call. People who hide their online status are rung silently and never reveal whether they are online |
 | Reliability | Unanswered calls give up after 45 seconds. A closed or reloaded page ends its call within seconds, not minutes. One call at a time per person, with a limit on how fast someone can ring |
 
-Sound and picture travel **directly between the two phones** (WebRTC, encrypted), not through your server, so the free host carries only the ringing and set-up messages. Roughly one call in seven cannot connect directly (strict office or mobile networks) and needs a relay; see `TURN_*` settings below. Calls need HTTPS (or `localhost`), a microphone, and a current browser.
+Sound and picture travel **directly between the two phones** (WebRTC, encrypted), not through your server, so the free host carries only the ringing and set-up messages, and direct calls have no usage limit. When no direct route works (for example two phones on a Wi-Fi that keeps its devices apart, or a strict office network) the call goes through a relay instead: by default the public relay of the [Jami](https://jami.net) project, which is free but run by a third party. The relay only passes along encrypted data. While a call is on a relay, the caller looks for a direct route once a minute and moves the call to it without a break when one appears (for example after someone leaves the Wi-Fi for mobile data). See `JAMI_RELAY` and `TURN_*` below. Calls need HTTPS (or `localhost`), a microphone, and a current browser.
 
 ### Around the app
 
@@ -136,7 +136,7 @@ Run these from the repository root.
 | `npm run dev` | Starts the API (tsx watch) and Vite, proxying `/api`, `/uploads` and `/socket.io` |
 | `npm run build` | Builds the web app and compiles the server |
 | `npm start` | Production: one Node process serves the API, websockets and the built web app |
-| `npm test` | Runs the server test suite (224 tests) |
+| `npm test` | Runs the server test suite (226 tests) |
 | `npm run typecheck` | Type-checks both workspaces |
 
 ## Configuration
@@ -153,8 +153,9 @@ All settings are optional environment variables read by the server. Defaults wor
 | `MAIL_FROM_NAME` | `WeText` | Sender name |
 | `PHOTO_QUOTA_MB` | `150` | Photo and voice-message storage allowed per account |
 | `ADMIN_USERNAME` | | Optional. The one account allowed to read `GET /api/admin/reports` |
-| `TURN_API_URL` | | Optional relay for calls that cannot connect directly. A web address that returns a list of connection servers, for example Metered Open Relay: `https://YOURAPP.metered.live/api/v1/turn/credentials?apiKey=KEY` (free plan, 20 GB a month, needs a sign-up; check their terms for whether a card is asked). The key stays on the server |
-| `TURN_URLS`, `TURN_USERNAME`, `TURN_CREDENTIAL` | | Alternative to `TURN_API_URL` for a relay you run yourself (comma-separated URLs such as `turn:relay.example.com:3478`) |
+| `JAMI_RELAY` | on | Relay for calls that cannot connect directly: the Jami project's public relay (`turn.jami.net`, with the login its documentation publishes). Free with no published limit, but a third-party service with no promise it stays available. Set to `off` to stop using it |
+| `TURN_API_URL` | | Optional extra relay of your own, tried before Jami. A web address that returns a list of connection servers, for example Metered: `https://YOURAPP.metered.live/api/v1/turn/credentials?apiKey=KEY` (its free trial was 500 MB when checked). The key stays on the server |
+| `TURN_URLS`, `TURN_USERNAME`, `TURN_CREDENTIAL` | | Optional extra relay with a fixed login, tried before Jami (comma-separated URLs such as `turn:relay.example.com:3478`) |
 | `PORT` | `4000` | HTTP port |
 | `HOST` | `127.0.0.1` | Use `0.0.0.0` in containers and on hosts like Render |
 | `WEB_ORIGIN` | `http://localhost:5173` | Allowed browser origin in development |
@@ -245,7 +246,7 @@ Socket.IO authenticates with the same session cookie. The server pushes these ev
 npm test
 ```
 
-224 tests cover authentication, post visibility and privacy rules, search, matching, moods, prompts, fading notes, whispers, edit history, reports and data export, every chat feature (edit, forward, star, pin, archive, disappearing messages, voice uploads and range requests, shared notes), group chats (members, roles, history cutoff, leaving), calls (ringing, answering, declining, busy, offline, several tabs, reconnecting, dropped connections, permissions, and the logic that adapts to a weak connection), socket events, photo storage, the database adapter, concurrency races and password reset. They run against a temporary database and need no setup.
+226 tests cover authentication, post visibility and privacy rules, search, matching, moods, prompts, fading notes, whispers, edit history, reports and data export, every chat feature (edit, forward, star, pin, archive, disappearing messages, voice uploads and range requests, shared notes), group chats (members, roles, history cutoff, leaving), calls (ringing, answering, declining, busy, offline, several tabs, reconnecting, dropped connections, permissions, and the logic that adapts to a weak connection), socket events, photo storage, the database adapter, concurrency races and password reset. They run against a temporary database and need no setup.
 
 To run them against a real libSQL server instead (the same protocol Turso uses), start one and point the tests at it:
 
